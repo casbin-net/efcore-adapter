@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
 
 namespace Casbin.NET.Adapter.EFCore
 {
-    public class CasbinDbContext : DbContext
+    public partial class CasbinDbContext : DbContext
     {
-        public DbSet<CasbinRule> CasbinRule { get; set; }
+        public virtual DbSet<CasbinRule> CasbinRule { get; set; }
+
+        private readonly IEntityTypeConfiguration<CasbinRule> _casbinModelConfig;
 
         public CasbinDbContext()
         {
@@ -15,9 +16,22 @@ namespace Casbin.NET.Adapter.EFCore
         {
         }
 
+        public CasbinDbContext(DbContextOptions<CasbinDbContext> options, IEntityTypeConfiguration<CasbinRule> casbinModelConfig) : base(options)
+        {
+            _casbinModelConfig = casbinModelConfig;
+        }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            if (_casbinModelConfig != null)
+            {
+                modelBuilder.ApplyConfiguration(_casbinModelConfig);
+            }
+        }
+
     }
 
-    public class CasbinRule
+    public partial class CasbinRule
     {
         public int Id { get; set; }
         public string PType { get; set; }
