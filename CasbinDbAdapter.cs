@@ -25,27 +25,91 @@ namespace Casbin.NET.Adapter.EFCore
 
         public void RemovePolicy(string sec, string pType, IList<string> rule)
         {
-            var line = savePolicyLine(pType, rule);
-            var dbRow = _context.CasbinRule.Where(p => p.PType == pType)
-                .Where(p => p.V0 == line.V0)
-                .Where(p => p.V1 == line.V1)
-                .Where(p => p.V2 == line.V2)
-                .Where(p => p.V3 == line.V3)
-                .Where(p => p.V4 == line.V4)
-                .Where(p => p.V5 == line.V5)
-                .FirstOrDefault();
-            _context.Entry(dbRow).State = EntityState.Deleted;
-            _context.SaveChanges();
+            RemoveFilteredPolicy(sec, pType, 0, rule.ToArray());
         }
 
-        public void RemoveFilteredPolicy(string a1, string a2, int a3, params string[] a4)
+        public void RemoveFilteredPolicy(string sec, string ptype, int fieldIndex, params string[] fieldValues)
         {
-            throw new NotImplementedException("to be done!");
+            if (fieldValues == null || !fieldValues.Any())
+                return;
+            var line = new CasbinRule(){
+                PType = ptype
+            };
+            var len = fieldValues.Count();
+            if (fieldIndex <= 0 && 0 < fieldIndex + len)
+            {
+                line.V0 = fieldValues[0 - fieldIndex];
+            }
+            if (fieldIndex <= 1 && 1 < fieldIndex + len)
+            {
+                line.V1 = fieldValues[1 - fieldIndex];
+            }
+            if (fieldIndex <= 2 && 2 < fieldIndex + len)
+            {
+                line.V2 = fieldValues[2 - fieldIndex];
+            }
+            if (fieldIndex <= 3 && 3 < fieldIndex + len)
+            {
+                line.V3 = fieldValues[3 - fieldIndex];
+            }
+            if (fieldIndex <= 4 && 4 < fieldIndex + len)
+            {
+                line.V4 = fieldValues[4 - fieldIndex];
+            }
+            if (fieldIndex <= 5 && 5 < fieldIndex + len)
+            {
+                line.V5 = fieldValues[5 - fieldIndex];
+            }
+            var dbRow = _context.CasbinRule.Where(p => p.PType == line.PType)
+               .Where(p => p.V0 == line.V0)
+               .Where(p => p.V1 == line.V1)
+               .Where(p => p.V2 == line.V2)
+               .Where(p => p.V3 == line.V3)
+               .Where(p => p.V4 == line.V4)
+               .Where(p => p.V5 == line.V5)
+               .FirstOrDefault();
+       
+            if (dbRow != null)
+            {
+                _context.Entry(dbRow).State = EntityState.Deleted;
+                _context.SaveChanges();
+            }
         }
 
-        public void SavePolicy(Model m)
+        public void SavePolicy(Model model)
         {
-            throw new NotImplementedException("to be done!");
+            List<CasbinRule> lines = new List<CasbinRule>();
+            if (model.Model.ContainsKey("p"))
+            {
+                foreach (var kv in model.Model["p"])
+                {
+                    var ptype = kv.Key;
+                    var ast = kv.Value;
+                    foreach (var rule in ast.Policy)
+                    {
+                        var line = savePolicyLine(ptype, rule);
+                        lines.Add(line);
+                    }
+                }
+            }
+            if (model.Model.ContainsKey("g"))
+            {
+                foreach (var kv in model.Model["g"])
+                {
+                    var ptype = kv.Key;
+                    var ast = kv.Value;
+                    foreach (var rule in ast.Policy)
+                    {
+                        var line = savePolicyLine(ptype, rule);
+                        lines.Add(line);
+                    }
+                }
+            }
+            if (lines.Any())
+            {
+                _context.CasbinRule.AddRange(lines);
+                _context.SaveChanges();
+            }
         }
 
         public void AddPolicy(string sec, string pType, IList<string> rule)
@@ -57,7 +121,6 @@ namespace Casbin.NET.Adapter.EFCore
 
         private void LoadPolicyData(Model model, Helper.LoadPolicyLineHandler<string, Model> handler, IEnumerable<CasbinRule> rules)
         {
-
             foreach (var rule in rules)
             {
                 handler(GetPolicyCotent(rule), model);
