@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>Casbin.NET.Adapter.EFCore</RootNamespace>
     <PackageId>Casbin.NET.Adapter.EFCore</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>
