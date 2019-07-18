@@ -1,0 +1,18 @@
+language: csharp
+mono: none
+solution: EFCore-Adapter.sln
+dist: xenial
+dotnet: 2.2
+script:
+    - dotnet restore
+    - dotnet build
+    - dotnet test EFCore-Adapter.UnitTest
+deploy:
+  provider: script
+  script: dotnet pack && dotnet nuget push EFCore-Adapter/bin/Debug/Casbin.NET.Adapter.EFCore.*.nupkg -k $TRAVIS_CASBIN_NUGET_KEY -s https://api.nuget.org/v3/index.json
+  on:
+    tags: true
+    branch: master
+global:
+    - DOTNET_SKIP_FIRST_TIME_EXPERIENCE=true
+    - DOTNET_CLI_TELEMETRY_OPTOUT=1
