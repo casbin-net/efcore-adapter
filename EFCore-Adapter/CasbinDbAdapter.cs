@@ -8,11 +8,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Casbin.NET.Adapter.EFCore
 {
-    public class CasbinDbAdapter : IAdapter
+    public class CasbinDbAdapter<TKey> : IAdapter
+        where TKey : IEquatable<TKey>
     {
-        private readonly CasbinDbContext _context;
+        private readonly CasbinDbContext<TKey> _context;
 
-        public CasbinDbAdapter(CasbinDbContext context)
+        public CasbinDbAdapter(CasbinDbContext<TKey> context)
         {
             _context = context;
         }
@@ -32,7 +33,7 @@ namespace Casbin.NET.Adapter.EFCore
         {
             if (fieldValues == null || !fieldValues.Any())
                 return;
-            var line = new CasbinRule(){
+            var line = new CasbinRule<TKey>(){
                 PType = ptype
             };
             var len = fieldValues.Count();
@@ -78,7 +79,7 @@ namespace Casbin.NET.Adapter.EFCore
 
         public void SavePolicy(Model model)
         {
-            List<CasbinRule> lines = new List<CasbinRule>();
+            List<CasbinRule<TKey>> lines = new List<CasbinRule<TKey>>();
             if (model.Model.ContainsKey("p"))
             {
                 foreach (var kv in model.Model["p"])
@@ -119,7 +120,7 @@ namespace Casbin.NET.Adapter.EFCore
             _context.SaveChanges();
         }
 
-        private void LoadPolicyData(Model model, Helper.LoadPolicyLineHandler<string, Model> handler, IEnumerable<CasbinRule> rules)
+        private void LoadPolicyData(Model model, Helper.LoadPolicyLineHandler<string, Model> handler, IEnumerable<CasbinRule<TKey>> rules)
         {
             foreach (var rule in rules)
             {
@@ -127,7 +128,7 @@ namespace Casbin.NET.Adapter.EFCore
             }
         }
 
-        private string GetPolicyCotent(CasbinRule rule)
+        private string GetPolicyCotent(CasbinRule<TKey> rule)
         {
             StringBuilder sb = new StringBuilder(rule.PType);
             void Append(string v)
@@ -147,9 +148,9 @@ namespace Casbin.NET.Adapter.EFCore
             return sb.ToString();
         }
 
-        private CasbinRule savePolicyLine(string pType, IList<string> rule)
+        private CasbinRule<TKey> savePolicyLine(string pType, IList<string> rule)
         {
-            var line = new CasbinRule();
+            var line = new CasbinRule<TKey>();
             line.PType = pType;
             if (rule.Count() > 0)
             {
