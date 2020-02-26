@@ -61,20 +61,39 @@ namespace Casbin.NET.Adapter.EFCore
             {
                 line.V5 = fieldValues[5 - fieldIndex];
             }
-            var dbRow = _context.CasbinRule.Where(p => p.PType == line.PType)
-               .Where(p => p.V0 == line.V0)
-               .Where(p => p.V1 == line.V1)
-               .Where(p => p.V2 == line.V2)
-               .Where(p => p.V3 == line.V3)
-               .Where(p => p.V4 == line.V4)
-               .Where(p => p.V5 == line.V5)
-               .FirstOrDefault();
-       
-            if (dbRow != null)
+
+            var query = _context.CasbinRule.Where(p => p.PType == line.PType);
+            if (!string.IsNullOrEmpty(line.V0))
+            {
+                query = query.Where(p => p.V0 == line.V0);
+            }
+            if (!string.IsNullOrEmpty(line.V1))
+            {
+                query = query.Where(p => p.V1 == line.V1);
+            }
+            if (!string.IsNullOrEmpty(line.V2))
+            {
+                query = query.Where(p => p.V2 == line.V2);
+            }
+            if (!string.IsNullOrEmpty(line.V3))
+            {
+                query = query.Where(p => p.V3 == line.V3);
+            }
+            if (!string.IsNullOrEmpty(line.V4))
+            {
+                query = query.Where(p => p.V4 == line.V4);
+            }
+            if (!string.IsNullOrEmpty(line.V5))
+            {
+                query = query.Where(p => p.V5 == line.V5);
+            }
+
+            foreach (var dbRow in query)
             {
                 _context.Entry(dbRow).State = EntityState.Deleted;
-                _context.SaveChanges();
             }
+
+            _context.SaveChanges();
         }
 
         public void SavePolicy(Model model)
