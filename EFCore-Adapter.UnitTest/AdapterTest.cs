@@ -3,6 +3,7 @@ using Xunit;
 using Casbin.NET.Adapter.EFCore;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Linq;
 
 namespace EFCore_Adapter.Test
 {
@@ -78,6 +79,7 @@ namespace EFCore_Adapter.Test
                 AsList("data2_admin", "data2", "read"),
                 AsList("data2_admin", "data2", "write")
             ));
+            Assert.True(_context.CasbinRule.Count() == 5);
 
             e.AddPolicy("alice", "data1", "write");
             TestGetPolicy(e, AsList(
@@ -87,6 +89,7 @@ namespace EFCore_Adapter.Test
                 AsList("data2_admin", "data2", "write"),
                 AsList("alice", "data1", "write")
             ));
+            Assert.True(_context.CasbinRule.Count() == 6);
 
             e.RemovePolicy("alice", "data1", "write");
             TestGetPolicy(e, AsList(
@@ -95,13 +98,14 @@ namespace EFCore_Adapter.Test
                 AsList("data2_admin", "data2", "read"),
                 AsList("data2_admin", "data2", "write")
             ));
+            Assert.True(_context.CasbinRule.Count() == 5);
 
             e.RemoveFilteredPolicy(0, "data2_admin");
             TestGetPolicy(e, AsList(
                 AsList("alice", "data1", "read"),
                 AsList("bob", "data2", "write")
             ));
+            Assert.True(_context.CasbinRule.Count() == 3);
         }
-
     }
 }
