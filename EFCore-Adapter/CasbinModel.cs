@@ -3,8 +3,7 @@ using System;
 
 namespace Casbin.NET.Adapter.EFCore
 {
-    public partial class CasbinDbContext<TKey> : DbContext
-        where TKey : IEquatable<TKey>
+    public partial class CasbinDbContext<TKey> : DbContext where TKey : IEquatable<TKey>
     {
         public virtual DbSet<CasbinRule<TKey>> CasbinRule { get; set; }
 
@@ -33,8 +32,7 @@ namespace Casbin.NET.Adapter.EFCore
 
     }
 
-    public partial class CasbinRule<TKey> : ICasbinRule
-        where TKey : IEquatable<TKey>
+    public partial class CasbinRule<TKey> : ICasbinRule where TKey : IEquatable<TKey>
     {
         public virtual TKey Id { get; set; }
         public string PType { get; set; }
