@@ -37,13 +37,12 @@ namespace EFCore_Adapter.Test
         internal static void TestGetPolicy(Enforcer e, List<List<String>> res)
         {
             List<List<String>> myRes = e.GetPolicy();
-             Assert.True(Utility.Array2DEquals(res, myRes));
+            Assert.True(Utility.Array2DEquals(res, myRes));
         }
 
         internal static void TestGetFilteredPolicy(Enforcer e, int fieldIndex, List<List<String>> res, params string[] fieldValues)
         {
             List<List<String>> myRes = e.GetFilteredPolicy(fieldIndex, fieldValues);
-
             Assert.True(Utility.Array2DEquals(res, myRes));
         }
 
