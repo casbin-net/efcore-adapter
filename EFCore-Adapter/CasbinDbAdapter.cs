@@ -8,8 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Casbin.NET.Adapter.EFCore
 {
-    public class CasbinDbAdapter<TKey> : IAdapter
-        where TKey : IEquatable<TKey>
+    public class CasbinDbAdapter<TKey> : IAdapter where TKey : IEquatable<TKey>
     {
         private readonly CasbinDbContext<TKey> _context;
 
@@ -33,7 +32,8 @@ namespace Casbin.NET.Adapter.EFCore
         {
             if (fieldValues == null || !fieldValues.Any())
                 return;
-            var line = new CasbinRule<TKey>(){
+            var line = new CasbinRule<TKey>()
+            {
                 PType = ptype
             };
             var len = fieldValues.Count();
