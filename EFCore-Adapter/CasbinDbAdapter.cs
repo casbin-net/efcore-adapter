@@ -5,6 +5,7 @@ using System.Text;
 using System.Linq;
 using System;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace Casbin.NET.Adapter.EFCore
 {
@@ -197,6 +198,21 @@ namespace Casbin.NET.Adapter.EFCore
             }
 
             return line;
+        }
+
+        public Task LoadPolicyAsync(Model model)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task SavePolicyAsync(Model model)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task AddPolicyAsync(string sec, string ptype, IList<string> rule)
+        {
+            throw new NotImplementedException();
         }
     }
 }
