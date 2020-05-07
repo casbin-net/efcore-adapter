@@ -7,9 +7,8 @@ using NetCasbin;
 
 namespace EFCore_Adapter.Test
 {
-    public  class TestUtil
+    public class TestUtil
     {
-
         internal List<T> AsList<T>(params T[] values)
         {
             return values.ToList();
