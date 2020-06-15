@@ -5,11 +5,11 @@ using System.Text;
 using System.Linq;
 using System;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace Casbin.NET.Adapter.EFCore
 {
-    public class CasbinDbAdapter<TKey> : IAdapter
-        where TKey : IEquatable<TKey>
+    public class CasbinDbAdapter<TKey> : IAdapter where TKey : IEquatable<TKey>
     {
         private readonly CasbinDbContext<TKey> _context;
 
@@ -24,16 +24,17 @@ namespace Casbin.NET.Adapter.EFCore
             LoadPolicyData(model, Helper.LoadPolicyLine, rules);
         }
 
-        public void RemovePolicy(string sec, string pType, IList<string> rule)
+        public void RemovePolicy(string sec, string ptype, IList<string> rule)
         {
-            RemoveFilteredPolicy(sec, pType, 0, rule.ToArray());
+            RemoveFilteredPolicy(sec, ptype, 0, rule.ToArray());
         }
 
         public void RemoveFilteredPolicy(string sec, string ptype, int fieldIndex, params string[] fieldValues)
         {
             if (fieldValues == null || !fieldValues.Any())
                 return;
-            var line = new CasbinRule<TKey>(){
+            var line = new CasbinRule<TKey>()
+            {
                 PType = ptype
             };
             var len = fieldValues.Count();
@@ -61,51 +62,44 @@ namespace Casbin.NET.Adapter.EFCore
             {
                 line.V5 = fieldValues[5 - fieldIndex];
             }
-            var dbRow = _context.CasbinRule.Where(p => p.PType == line.PType)
-               .Where(p => p.V0 == line.V0)
-               .Where(p => p.V1 == line.V1)
-               .Where(p => p.V2 == line.V2)
-               .Where(p => p.V3 == line.V3)
-               .Where(p => p.V4 == line.V4)
-               .Where(p => p.V5 == line.V5)
-               .FirstOrDefault();
-       
-            if (dbRow != null)
+
+            var query = _context.CasbinRule.Where(p => p.PType == line.PType);
+            if (!string.IsNullOrEmpty(line.V0))
+            {
+                query = query.Where(p => p.V0 == line.V0);
+            }
+            if (!string.IsNullOrEmpty(line.V1))
+            {
+                query = query.Where(p => p.V1 == line.V1);
+            }
+            if (!string.IsNullOrEmpty(line.V2))
+            {
+                query = query.Where(p => p.V2 == line.V2);
+            }
+            if (!string.IsNullOrEmpty(line.V3))
+            {
+                query = query.Where(p => p.V3 == line.V3);
+            }
+            if (!string.IsNullOrEmpty(line.V4))
+            {
+                query = query.Where(p => p.V4 == line.V4);
+            }
+            if (!string.IsNullOrEmpty(line.V5))
+            {
+                query = query.Where(p => p.V5 == line.V5);
+            }
+
+            foreach (var dbRow in query)
             {
                 _context.Entry(dbRow).State = EntityState.Deleted;
-                _context.SaveChanges();
             }
+
+            _context.SaveChanges();
         }
 
         public void SavePolicy(Model model)
         {
-            List<CasbinRule<TKey>> lines = new List<CasbinRule<TKey>>();
-            if (model.Model.ContainsKey("p"))
-            {
-                foreach (var kv in model.Model["p"])
-                {
-                    var ptype = kv.Key;
-                    var ast = kv.Value;
-                    foreach (var rule in ast.Policy)
-                    {
-                        var line = savePolicyLine(ptype, rule);
-                        lines.Add(line);
-                    }
-                }
-            }
-            if (model.Model.ContainsKey("g"))
-            {
-                foreach (var kv in model.Model["g"])
-                {
-                    var ptype = kv.Key;
-                    var ast = kv.Value;
-                    foreach (var rule in ast.Policy)
-                    {
-                        var line = savePolicyLine(ptype, rule);
-                        lines.Add(line);
-                    }
-                }
-            }
+            var lines = SavePolicyLines(model);
             if (lines.Any())
             {
                 _context.CasbinRule.AddRange(lines);
@@ -113,22 +107,45 @@ namespace Casbin.NET.Adapter.EFCore
             }
         }
 
-        public void AddPolicy(string sec, string pType, IList<string> rule)
+        public void AddPolicy(string sec, string ptype, IList<string> rule)
         {
-            var line = savePolicyLine(pType, rule);
+            var line = SavePolicyLine(ptype, rule);
             _context.CasbinRule.Add(line);
             _context.SaveChanges();
+        }
+
+        public async Task LoadPolicyAsync(Model model)
+        {
+            var rules = await _context.CasbinRule.ToListAsync();
+            LoadPolicyData(model, Helper.LoadPolicyLine, rules);
+        }
+
+        public async Task SavePolicyAsync(Model model)
+        {
+            var lines = SavePolicyLines(model);
+            if (lines.Any())
+            {
+                await _context.CasbinRule.AddRangeAsync(lines);
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task AddPolicyAsync(string sec, string ptype, IList<string> rule)
+        {
+            var line = SavePolicyLine(ptype, rule);
+            await _context.CasbinRule.AddAsync(line);
+            await _context.SaveChangesAsync();
         }
 
         private void LoadPolicyData(Model model, Helper.LoadPolicyLineHandler<string, Model> handler, IEnumerable<CasbinRule<TKey>> rules)
         {
             foreach (var rule in rules)
             {
-                handler(GetPolicyCotent(rule), model);
+                handler(GetPolicyContent(rule), model);
             }
         }
 
-        private string GetPolicyCotent(CasbinRule<TKey> rule)
+        private string GetPolicyContent(CasbinRule<TKey> rule)
         {
             StringBuilder sb = new StringBuilder(rule.PType);
             void Append(string v)
@@ -148,10 +165,10 @@ namespace Casbin.NET.Adapter.EFCore
             return sb.ToString();
         }
 
-        private CasbinRule<TKey> savePolicyLine(string pType, IList<string> rule)
+        private CasbinRule<TKey> SavePolicyLine(string ptype, IList<string> rule)
         {
             var line = new CasbinRule<TKey>();
-            line.PType = pType;
+            line.PType = ptype;
             if (rule.Count() > 0)
             {
                 line.V0 = rule[0];
@@ -178,6 +195,38 @@ namespace Casbin.NET.Adapter.EFCore
             }
 
             return line;
+        }
+
+        private List<CasbinRule<TKey>> SavePolicyLines(Model model)
+        {
+            List<CasbinRule<TKey>> lines = new List<CasbinRule<TKey>>();
+            if (model.Model.ContainsKey("p"))
+            {
+                foreach (var kv in model.Model["p"])
+                {
+                    var ptype = kv.Key;
+                    var ast = kv.Value;
+                    foreach (var rule in ast.Policy)
+                    {
+                        var line = SavePolicyLine(ptype, rule);
+                        lines.Add(line);
+                    }
+                }
+            }
+            if (model.Model.ContainsKey("g"))
+            {
+                foreach (var kv in model.Model["g"])
+                {
+                    var ptype = kv.Key;
+                    var ast = kv.Value;
+                    foreach (var rule in ast.Policy)
+                    {
+                        var line = SavePolicyLine(ptype, rule);
+                        lines.Add(line);
+                    }
+                }
+            }
+            return lines;
         }
     }
 }
