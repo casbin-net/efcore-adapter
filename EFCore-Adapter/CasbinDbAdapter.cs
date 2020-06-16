@@ -38,7 +38,7 @@ namespace Casbin.NET.Adapter.EFCore
             var line = SavePolicyLine(sec, ptype, fieldIndex, fieldValues);
 
             var query = _context.CasbinRule.Where(p => p.PType == line.PType);
-            applyQueryFilter(ref query, line);
+            query = ApplyQueryFilter(query, line);
 
             _context.RemoveRange(query);
             _context.SaveChanges();
@@ -100,7 +100,7 @@ namespace Casbin.NET.Adapter.EFCore
             var line = SavePolicyLine(sec, ptype, fieldIndex, fieldValues);
 
             var query = _context.CasbinRule.Where(p => p.PType == line.PType);
-            applyQueryFilter(ref query, line);
+            query = ApplyQueryFilter(query, line);
 
             _context.RemoveRange(query);
 
@@ -235,7 +235,7 @@ namespace Casbin.NET.Adapter.EFCore
             return line;
         }
 
-        private void applyQueryFilter(ref IQueryable<CasbinRule<TKey>> query, CasbinRule<TKey> line)
+        private IQueryable<CasbinRule<TKey>> ApplyQueryFilter(IQueryable<CasbinRule<TKey>> query, CasbinRule<TKey> line)
         {
             if (!string.IsNullOrEmpty(line.V0))
             {
@@ -261,6 +261,7 @@ namespace Casbin.NET.Adapter.EFCore
             {
                 query = query.Where(p => p.V5 == line.V5);
             }
+            return query;
         }
         #endregion
     }
