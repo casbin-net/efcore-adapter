@@ -18,9 +18,11 @@ namespace Casbin.NET.Adapter.EFCore
             _context = context;
         }
 
+        #region sync operations
+
         public void LoadPolicy(Model model)
         {
-            var rules = _context.CasbinRule.ToList();
+            var rules = _context.CasbinRule.AsNoTracking().ToList();
             LoadPolicyData(model, Helper.LoadPolicyLine, rules);
         }
 
@@ -33,67 +35,12 @@ namespace Casbin.NET.Adapter.EFCore
         {
             if (fieldValues == null || !fieldValues.Any())
                 return;
-            var line = new CasbinRule<TKey>()
-            {
-                PType = ptype
-            };
-            var len = fieldValues.Count();
-            if (fieldIndex <= 0 && 0 < fieldIndex + len)
-            {
-                line.V0 = fieldValues[0 - fieldIndex];
-            }
-            if (fieldIndex <= 1 && 1 < fieldIndex + len)
-            {
-                line.V1 = fieldValues[1 - fieldIndex];
-            }
-            if (fieldIndex <= 2 && 2 < fieldIndex + len)
-            {
-                line.V2 = fieldValues[2 - fieldIndex];
-            }
-            if (fieldIndex <= 3 && 3 < fieldIndex + len)
-            {
-                line.V3 = fieldValues[3 - fieldIndex];
-            }
-            if (fieldIndex <= 4 && 4 < fieldIndex + len)
-            {
-                line.V4 = fieldValues[4 - fieldIndex];
-            }
-            if (fieldIndex <= 5 && 5 < fieldIndex + len)
-            {
-                line.V5 = fieldValues[5 - fieldIndex];
-            }
+            var line = SavePolicyLine(sec, ptype, fieldIndex, fieldValues);
 
             var query = _context.CasbinRule.Where(p => p.PType == line.PType);
-            if (!string.IsNullOrEmpty(line.V0))
-            {
-                query = query.Where(p => p.V0 == line.V0);
-            }
-            if (!string.IsNullOrEmpty(line.V1))
-            {
-                query = query.Where(p => p.V1 == line.V1);
-            }
-            if (!string.IsNullOrEmpty(line.V2))
-            {
-                query = query.Where(p => p.V2 == line.V2);
-            }
-            if (!string.IsNullOrEmpty(line.V3))
-            {
-                query = query.Where(p => p.V3 == line.V3);
-            }
-            if (!string.IsNullOrEmpty(line.V4))
-            {
-                query = query.Where(p => p.V4 == line.V4);
-            }
-            if (!string.IsNullOrEmpty(line.V5))
-            {
-                query = query.Where(p => p.V5 == line.V5);
-            }
+            query = ApplyQueryFilter(query, line);
 
-            foreach (var dbRow in query)
-            {
-                _context.Entry(dbRow).State = EntityState.Deleted;
-            }
-
+            _context.RemoveRange(query);
             _context.SaveChanges();
         }
 
@@ -114,9 +61,13 @@ namespace Casbin.NET.Adapter.EFCore
             _context.SaveChanges();
         }
 
+        #endregion
+
+        #region async operations
+
         public async Task LoadPolicyAsync(Model model)
         {
-            var rules = await _context.CasbinRule.ToListAsync();
+            var rules = await _context.CasbinRule.AsNoTracking().ToListAsync();
             LoadPolicyData(model, Helper.LoadPolicyLine, rules);
         }
 
@@ -136,6 +87,28 @@ namespace Casbin.NET.Adapter.EFCore
             await _context.CasbinRule.AddAsync(line);
             await _context.SaveChangesAsync();
         }
+
+        public async Task RemovePolicyAsync(string sec, string ptype, IList<string> rule)
+        {
+            await RemoveFilteredPolicyAsync(sec, ptype, 0, rule.ToArray());
+        }
+
+        public async Task RemoveFilteredPolicyAsync(string sec, string ptype, int fieldIndex, params string[] fieldValues)
+        {
+            if (fieldValues == null || !fieldValues.Any())
+                return;
+            var line = SavePolicyLine(sec, ptype, fieldIndex, fieldValues);
+
+            var query = _context.CasbinRule.Where(p => p.PType == line.PType);
+            query = ApplyQueryFilter(query, line);
+
+            _context.RemoveRange(query);
+
+            await _context.SaveChangesAsync();
+        }
+        #endregion
+
+        #region helper functions
 
         private void LoadPolicyData(Model model, Helper.LoadPolicyLineHandler<string, Model> handler, IEnumerable<CasbinRule<TKey>> rules)
         {
@@ -163,38 +136,6 @@ namespace Casbin.NET.Adapter.EFCore
             Append(rule.V4);
             Append(rule.V5);
             return sb.ToString();
-        }
-
-        private CasbinRule<TKey> SavePolicyLine(string ptype, IList<string> rule)
-        {
-            var line = new CasbinRule<TKey>();
-            line.PType = ptype;
-            if (rule.Count() > 0)
-            {
-                line.V0 = rule[0];
-            }
-            if (rule.Count() > 1)
-            {
-                line.V1 = rule[1];
-            }
-            if (rule.Count() > 2)
-            {
-                line.V2 = rule[2];
-            }
-            if (rule.Count() > 3)
-            {
-                line.V3 = rule[3];
-            }
-            if (rule.Count() > 4)
-            {
-                line.V4 = rule[4];
-            }
-            if (rule.Count() > 5)
-            {
-                line.V5 = rule[5];
-            }
-
-            return line;
         }
 
         private List<CasbinRule<TKey>> SavePolicyLines(Model model)
@@ -228,5 +169,100 @@ namespace Casbin.NET.Adapter.EFCore
             }
             return lines;
         }
+        private CasbinRule<TKey> SavePolicyLine(string ptype, IList<string> rule)
+        {
+            var line = new CasbinRule<TKey>();
+            line.PType = ptype;
+            if (rule.Count() > 0)
+            {
+                line.V0 = rule[0];
+            }
+            if (rule.Count() > 1)
+            {
+                line.V1 = rule[1];
+            }
+            if (rule.Count() > 2)
+            {
+                line.V2 = rule[2];
+            }
+            if (rule.Count() > 3)
+            {
+                line.V3 = rule[3];
+            }
+            if (rule.Count() > 4)
+            {
+                line.V4 = rule[4];
+            }
+            if (rule.Count() > 5)
+            {
+                line.V5 = rule[5];
+            }
+
+            return line;
+        }
+
+        private CasbinRule<TKey> SavePolicyLine(string sec, string ptype, int fieldIndex, params string[] fieldValues)
+        {
+            var line = new CasbinRule<TKey>()
+            {
+                PType = ptype
+            };
+            var len = fieldValues.Count();
+            if (fieldIndex <= 0 && 0 < fieldIndex + len)
+            {
+                line.V0 = fieldValues[0 - fieldIndex];
+            }
+            if (fieldIndex <= 1 && 1 < fieldIndex + len)
+            {
+                line.V1 = fieldValues[1 - fieldIndex];
+            }
+            if (fieldIndex <= 2 && 2 < fieldIndex + len)
+            {
+                line.V2 = fieldValues[2 - fieldIndex];
+            }
+            if (fieldIndex <= 3 && 3 < fieldIndex + len)
+            {
+                line.V3 = fieldValues[3 - fieldIndex];
+            }
+            if (fieldIndex <= 4 && 4 < fieldIndex + len)
+            {
+                line.V4 = fieldValues[4 - fieldIndex];
+            }
+            if (fieldIndex <= 5 && 5 < fieldIndex + len)
+            {
+                line.V5 = fieldValues[5 - fieldIndex];
+            }
+            return line;
+        }
+
+        private IQueryable<CasbinRule<TKey>> ApplyQueryFilter(IQueryable<CasbinRule<TKey>> query, CasbinRule<TKey> line)
+        {
+            if (!string.IsNullOrEmpty(line.V0))
+            {
+                query = query.Where(p => p.V0 == line.V0);
+            }
+            if (!string.IsNullOrEmpty(line.V1))
+            {
+                query = query.Where(p => p.V1 == line.V1);
+            }
+            if (!string.IsNullOrEmpty(line.V2))
+            {
+                query = query.Where(p => p.V2 == line.V2);
+            }
+            if (!string.IsNullOrEmpty(line.V3))
+            {
+                query = query.Where(p => p.V3 == line.V3);
+            }
+            if (!string.IsNullOrEmpty(line.V4))
+            {
+                query = query.Where(p => p.V4 == line.V4);
+            }
+            if (!string.IsNullOrEmpty(line.V5))
+            {
+                query = query.Where(p => p.V5 == line.V5);
+            }
+            return query;
+        }
+        #endregion
     }
 }
