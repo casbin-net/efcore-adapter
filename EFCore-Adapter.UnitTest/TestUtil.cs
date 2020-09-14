@@ -1,11 +1,11 @@
-﻿using NetCasbin.Util;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Xunit;
 using NetCasbin;
+using NetCasbin.Util;
+using Xunit;
 
-namespace EFCore_Adapter.Test
+namespace EFCore_Adapter.UnitTest
 {
     public class TestUtil
     {

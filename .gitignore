@@ -9,6 +9,7 @@
 *.userosscache
 *.sln.docstates
 coverage.opencover.xml
+*.sqlite3
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
