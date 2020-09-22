@@ -37,7 +37,9 @@ script:
 
 deploy:
   provider: script
-  script: dotnet pack -c $BUILD_CONFIGURATION && dotnet nuget push EFCore-Adapter/bin/Debug/Casbin.NET.Adapter.EFCore.*.nupkg -k $TRAVIS_CASBIN_NUGET_KEY -s https://api.nuget.org/v3/index.json
+  script:
+    - dotnet pack -c $BUILD_CONFIGURATION -o packages
+    - dotnet nuget push packages/*.nupkg -s https://api.nuget.org/v3/index.json -k $TRAVIS_CASBIN_NUGET_KEY
   on:
     tags: true
     branch: master
