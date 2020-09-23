@@ -131,7 +131,7 @@ namespace EFCore_Adapter.UnitTest
         [Fact]
         public async Task TestAdapterAutoSaveAsync()
         {
-            var adapter = new CasbinDbAdapter<int>(_asyncContext);
+            var adapter = new CasbinDbAdapter<int, CasbinRule<int>>(_asyncContext);
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
 
             TestGetPolicy(enforcer, AsList(
