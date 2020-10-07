@@ -38,5 +38,5 @@ jobs:
     - name: Pack package
       run: dotnet pack -c Release -o packages --no-build;
 
-    - name: Push myget package
+    - name: Push nuget package
       run: dotnet nuget push .\packages\*.nupkg -s nuget.org -k $env:NUGET_API_TOKEN --skip-duplicate
