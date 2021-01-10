@@ -6,6 +6,7 @@ using Casbin.NET.Adapter.EFCore;
 using EFCore_Adapter.UnitTest.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using NetCasbin;
+using NetCasbin.Persist;
 using Xunit;
 
 namespace EFCore_Adapter.UnitTest
@@ -93,6 +94,7 @@ namespace EFCore_Adapter.UnitTest
             var adapter = new CasbinDbAdapter<int>(_context);
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
 
+            #region Load policy test
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
                 AsList("bob", "data2", "write"),
@@ -100,7 +102,9 @@ namespace EFCore_Adapter.UnitTest
                 AsList("data2_admin", "data2", "write")
             ));
             Assert.True(_context.CasbinRule.AsNoTracking().Count() is 5);
+            #endregion
 
+            #region Add policy test
             enforcer.AddPolicy("alice", "data1", "write");
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
@@ -110,7 +114,9 @@ namespace EFCore_Adapter.UnitTest
                 AsList("alice", "data1", "write")
             ));
             Assert.True(_context.CasbinRule.AsNoTracking().Count() is 6);
+            #endregion
 
+            #region Remove poliy test
             enforcer.RemovePolicy("alice", "data1", "write");
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
@@ -126,7 +132,9 @@ namespace EFCore_Adapter.UnitTest
                 AsList("bob", "data2", "write")
             ));
             Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
 
+            #region Batch APIs test
             enforcer.AddPolicies(new []
             {
                 new List<string>{"alice", "data2", "write"},
@@ -140,7 +148,6 @@ namespace EFCore_Adapter.UnitTest
             ));
             Assert.True(_context.CasbinRule.AsNoTracking().Count() is 5);
 
-            
             enforcer.RemovePolicies(new []
             {
                 new List<string>{"alice", "data1", "read"},
@@ -151,6 +158,27 @@ namespace EFCore_Adapter.UnitTest
                 AsList("bob", "data1", "read")
             ));
             Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
+
+            #region IFilteredAdapter test
+            enforcer.LoadFilteredPolicy(new Filter
+            {
+                P = new List<string>{"bob", "data1", "read"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
+
+            enforcer.LoadFilteredPolicy(new Filter
+            {
+                P = new List<string>{"", "", "write"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write")
+            ));
+            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
         }
 
         [Fact]
@@ -159,6 +187,7 @@ namespace EFCore_Adapter.UnitTest
             var adapter = new CasbinDbAdapter<int, CasbinRule<int>>(_asyncContext);
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
 
+            #region Load policy test
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
                 AsList("bob", "data2", "write"),
@@ -166,7 +195,9 @@ namespace EFCore_Adapter.UnitTest
                 AsList("data2_admin", "data2", "write")
             ));
             Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 5);
+            #endregion
 
+            #region Add policy test
             await enforcer.AddPolicyAsync("alice", "data1", "write");
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
@@ -176,7 +207,9 @@ namespace EFCore_Adapter.UnitTest
                 AsList("alice", "data1", "write")
             ));
             Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 6);
+            #endregion
 
+            #region Remove policy test
             await enforcer.RemovePolicyAsync("alice", "data1", "write");
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
@@ -192,7 +225,9 @@ namespace EFCore_Adapter.UnitTest
                 AsList("bob", "data2", "write")
             ));
             Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
 
+            #region Batch APIs test
             await enforcer.AddPoliciesAsync(new []
             {
                 new List<string>{"alice", "data2", "write"},
@@ -216,6 +251,27 @@ namespace EFCore_Adapter.UnitTest
                 AsList("bob", "data1", "read")
             ));
             Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
+
+            #region IFilteredAdapter test
+            await enforcer.LoadFilteredPolicyAsync(new Filter
+            {
+                P = new List<string>{"bob", "data1", "read"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
+
+            await enforcer.LoadFilteredPolicyAsync(new Filter
+            {
+                P = new List<string>{"", "", "write"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write")
+            ));
+            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
         }
     }
 }
