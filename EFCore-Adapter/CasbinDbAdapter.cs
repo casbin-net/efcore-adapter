@@ -62,6 +62,12 @@ namespace Casbin.NET.Adapter.EFCore
             return casbinRules;
         }
 
+        protected virtual IEnumerable<TCasbinRule> OnAddPolicies(string section, string policyType,
+            IEnumerable<IEnumerable<string>> rules, IEnumerable<TCasbinRule> casbinRules)
+        {
+            return casbinRules;
+        }
+
         protected virtual IQueryable<TCasbinRule> OnRemoveFilteredPolicy(string section, string policyType, int fieldIndex, string[] fieldValues, IQueryable<TCasbinRule> casbinRules)
         {
             return casbinRules;
@@ -125,6 +131,11 @@ namespace Casbin.NET.Adapter.EFCore
 
         public virtual void AddPolicy(string section, string policyType, IList<string> rule)
         {
+            if (rule is null || rule.Count is 0)
+            {
+                return;
+            }
+
             var casbinRule = CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, rule);
             casbinRule = OnAddPolicy(section, policyType, rule, casbinRule);
             CasbinRules.Add(casbinRule);
@@ -133,9 +144,54 @@ namespace Casbin.NET.Adapter.EFCore
 
         public virtual async Task AddPolicyAsync(string section, string policyType, IList<string> rule)
         {
+            if (rule is null || rule.Count is 0)
+            {
+                return;
+            }
+
             var casbinRule = CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, rule);
             casbinRule = OnAddPolicy(section, policyType, rule, casbinRule);
             await CasbinRules.AddAsync(casbinRule);
+            await DbContext.SaveChangesAsync();
+        }
+        
+        public void AddPolicies(string section, string policyType, IEnumerable<IList<string>> rules)
+        {
+            if (rules is null)
+            {
+                return;
+            }
+
+            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            if (rulesArray.Length is 0)
+            {
+                return;
+            }
+
+            var casbinRules = rulesArray.Select(r => 
+                CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, r));
+            casbinRules = OnAddPolicies(section, policyType, rulesArray, casbinRules);
+            CasbinRules.AddRange(casbinRules);
+            DbContext.SaveChanges();
+        }
+
+        public async Task AddPoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
+        {
+            if (rules is null)
+            {
+                return;
+            }
+
+            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            if (rulesArray.Length is 0)
+            {
+                return;
+            }
+
+            var casbinRules = rulesArray.Select(r => 
+                CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, r));
+            casbinRules = OnAddPolicies(section, policyType, rulesArray, casbinRules);
+            await CasbinRules.AddRangeAsync(casbinRules);
             await DbContext.SaveChangesAsync();
         }
 
@@ -145,12 +201,24 @@ namespace Casbin.NET.Adapter.EFCore
 
         public virtual void RemovePolicy(string section, string policyType, IList<string> rule)
         {
-            RemoveFilteredPolicy(section, policyType, 0, rule.ToArray());
+            if (rule is null || rule.Count is 0)
+            {
+                return;
+            }
+
+            RemovePolicyInMemory(section, policyType, rule);
+            DbContext.SaveChanges();
         }
 
         public virtual async Task RemovePolicyAsync(string section, string policyType, IList<string> rule)
         {
-            await RemoveFilteredPolicyAsync(section, policyType, 0, rule.ToArray());
+            if (rule is null || rule.Count is 0)
+            {
+                return;
+            }
+
+            RemovePolicyInMemory(section, policyType, rule);
+            await DbContext.SaveChangesAsync();
         }
 
         public virtual void RemoveFilteredPolicy(string section, string policyType, int fieldIndex, params string[] fieldValues)
@@ -160,12 +228,7 @@ namespace Casbin.NET.Adapter.EFCore
                 return;
             }
 
-            var query = CasbinRules
-                .Where(p => string.Equals(p.PType, policyType))
-                .ApplyQueryFilter(fieldIndex, fieldValues);
-
-            query = OnRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues, query);
-            CasbinRules.RemoveRange(query);
+            RemoveFilteredPolicyInMemory(section, policyType, fieldIndex, fieldValues);
             DbContext.SaveChanges();
         }
 
@@ -176,15 +239,66 @@ namespace Casbin.NET.Adapter.EFCore
                 return;
             }
 
+            RemoveFilteredPolicyInMemory(section, policyType, fieldIndex, fieldValues);
+            await DbContext.SaveChangesAsync();
+        }
+
+
+        public void RemovePolicies(string section, string policyType, IEnumerable<IList<string>> rules)
+        {
+            if (rules is null)
+            {
+                return;
+            }
+
+            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            if (rulesArray.Length is 0)
+            {
+                return;
+            }
+
+            foreach (var rule in rulesArray)
+            {
+                RemovePolicyInMemory(section, policyType, rule);
+            }
+            DbContext.SaveChanges();
+        }
+
+        public async Task RemovePoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
+        {
+            if (rules is null)
+            {
+                return;
+            }
+
+            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            if (rulesArray.Length is 0)
+            {
+                return;
+            }
+
+            foreach (var rule in rulesArray)
+            {
+                RemovePolicyInMemory(section, policyType, rule);
+            }
+            await DbContext.SaveChangesAsync();
+        }
+
+        #endregion
+
+        private void RemovePolicyInMemory(string section, string policyType, IEnumerable<string> rule)
+        {
+            RemoveFilteredPolicy(section, policyType, 0, rule as string[] ?? rule.ToArray());
+        }
+
+        private void RemoveFilteredPolicyInMemory(string section, string policyType, int fieldIndex, params string[] fieldValues)
+        {
             var query = CasbinRules
                 .Where(p => string.Equals(p.PType, policyType))
                 .ApplyQueryFilter(fieldIndex, fieldValues);
 
             query = OnRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues, query);
             CasbinRules.RemoveRange(query);
-            await DbContext.SaveChangesAsync();
         }
-
-        #endregion
     }
 }
