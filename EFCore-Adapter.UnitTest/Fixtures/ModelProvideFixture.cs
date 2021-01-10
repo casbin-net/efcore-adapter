@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using NetCasbin;
 using NetCasbin.Model;
 
 namespace EFCore_Adapter.UnitTest.Fixtures
@@ -10,7 +9,7 @@ namespace EFCore_Adapter.UnitTest.Fixtures
 
         public Model GetNewRbacModel()
         {
-            return CoreEnforcer.NewModel(_rbacModelText);
+            return Model.CreateDefaultFromText(_rbacModelText);
         }
     }
 }
