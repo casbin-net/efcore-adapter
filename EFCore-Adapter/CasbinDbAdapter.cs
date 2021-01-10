@@ -26,7 +26,7 @@ namespace Casbin.NET.Adapter.EFCore
         }
     }
 
-    public class CasbinDbAdapter<TKey, TCasbinRule, TDbContext> : IAdapter 
+    public class CasbinDbAdapter<TKey, TCasbinRule, TDbContext> : IAdapter, IFilteredAdapter 
         where TDbContext : DbContext
         where TCasbinRule : class, ICasbinRule<TKey>, new()
         where TKey : IEquatable<TKey>
@@ -286,6 +286,28 @@ namespace Casbin.NET.Adapter.EFCore
 
         #endregion
 
+        #region IFilteredAdapter
+
+        public bool IsFiltered => true;
+
+        public void LoadFilteredPolicy(Model model, Filter filter)
+        {
+            var casbinRules = CasbinRules.AsNoTracking()
+                .ApplyQueryFilter(filter);
+            casbinRules = OnLoadPolicy(model, casbinRules);
+            model.LoadPolicyFromCasbinRules(casbinRules.ToList());
+        }
+
+        public async Task LoadFilteredPolicyAsync(Model model, Filter filter)
+        {
+            var casbinRules = CasbinRules.AsNoTracking()
+                .ApplyQueryFilter(filter);
+            casbinRules = OnLoadPolicy(model, casbinRules);
+            model.LoadPolicyFromCasbinRules(await casbinRules.ToListAsync());
+        }
+
+        #endregion
+
         private void RemovePolicyInMemory(string section, string policyType, IEnumerable<string> rule)
         {
             RemoveFilteredPolicy(section, policyType, 0, rule as string[] ?? rule.ToArray());
@@ -293,12 +315,11 @@ namespace Casbin.NET.Adapter.EFCore
 
         private void RemoveFilteredPolicyInMemory(string section, string policyType, int fieldIndex, params string[] fieldValues)
         {
-            var query = CasbinRules
-                .Where(p => string.Equals(p.PType, policyType))
-                .ApplyQueryFilter(fieldIndex, fieldValues);
+            var query = CasbinRules.ApplyQueryFilter(policyType, fieldIndex, fieldValues);
 
             query = OnRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues, query);
             CasbinRules.RemoveRange(query);
         }
+
     }
 }
