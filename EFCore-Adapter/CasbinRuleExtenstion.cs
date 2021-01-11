@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NetCasbin.Model;
+using NetCasbin.Persist;
 
 namespace Casbin.NET.Adapter.EFCore
 {
@@ -53,7 +54,8 @@ namespace Casbin.NET.Adapter.EFCore
             }
         }
 
-        internal static IQueryable<TCasbinRule> ApplyQueryFilter<TCasbinRule>(this IQueryable<TCasbinRule> query, int fieldIndex, IList<string> fieldValues)
+        internal static IQueryable<TCasbinRule> ApplyQueryFilter<TCasbinRule>(this IQueryable<TCasbinRule> query, 
+            string policyType , int fieldIndex, IEnumerable<string> fieldValues)
             where TCasbinRule : ICasbinRule
         {
             if (fieldIndex > 5)
@@ -61,7 +63,8 @@ namespace Casbin.NET.Adapter.EFCore
                 throw new ArgumentOutOfRangeException(nameof(fieldIndex));
             }
 
-            int fieldValueCount = fieldValues.Count;
+            var fieldValuesList = fieldValues as IList<string> ?? fieldValues.ToArray();
+            int fieldValueCount = fieldValuesList.Count;
 
             if (fieldValueCount is 0)
             {
@@ -75,34 +78,82 @@ namespace Casbin.NET.Adapter.EFCore
                 throw new ArgumentOutOfRangeException(nameof(lastIndex));
             }
 
+            query = query.Where(p => string.Equals(p.PType, policyType));
+
             if (fieldIndex is 0 && lastIndex > 0)
             {
-                query = query.Where(p => p.V0 == fieldValues[0 - fieldIndex]);
+                string field = fieldValuesList[fieldIndex];
+                if (string.IsNullOrWhiteSpace(field) is false)
+                {
+                    query = query.Where(p => p.V0 == field);
+                }
+
             }
 
             if (fieldIndex <= 1 && lastIndex > 1)
             {
-                query = query.Where(p => p.V1 == fieldValues[1 - fieldIndex]);
+                string field = fieldValuesList[1 - fieldIndex];
+                if (string.IsNullOrWhiteSpace(field) is false)
+                {
+                    query = query.Where(p => p.V1 == field);
+                }
             }
 
             if (fieldIndex <= 2 && lastIndex > 2)
             {
-                query = query.Where(p => p.V2 == fieldValues[2 - fieldIndex]);
+                string field = fieldValuesList[2 - fieldIndex];
+                if (string.IsNullOrWhiteSpace(field) is false)
+                {
+                    query = query.Where(p => p.V2 == field);
+                }
             }
 
             if (fieldIndex <= 3 && lastIndex > 3)
             {
-                query = query.Where(p => p.V3 == fieldValues[3 - fieldIndex]);
+                string field = fieldValuesList[3 - fieldIndex];
+                if (string.IsNullOrWhiteSpace(field) is false)
+                {
+                    query = query.Where(p => p.V3 == field);
+                }
             }
 
             if (fieldIndex <= 4 && lastIndex > 4)
             {
-                query = query.Where(p => p.V4 == fieldValues[4 - fieldIndex]);
+                string field = fieldValuesList[4 - fieldIndex];
+                if (string.IsNullOrWhiteSpace(field) is false)
+                {
+                    query = query.Where(p => p.V4 == field);
+                }
             }
 
             if (lastIndex is 5)
             {
-                query = query.Where(p => p.V5 == fieldValues[5 - fieldIndex]);
+                string field = fieldValuesList[5 - fieldIndex];
+                if (string.IsNullOrWhiteSpace(field) is false)
+                {
+                    query = query.Where(p => p.V5 == field);
+                }
+            }
+
+            return query;
+        }
+
+        internal static IQueryable<TCasbinRule> ApplyQueryFilter<TCasbinRule>(this IQueryable<TCasbinRule> query, Filter filter)
+            where TCasbinRule : ICasbinRule
+        {
+            if (filter is null)
+            {
+                return query;
+            }
+
+            if (filter.P is not null)
+            {
+                query = query.ApplyQueryFilter(PermConstants.DefaultPolicyType, 0, filter.P);
+            }
+
+            if (filter.G is not null)
+            {
+                query = query.ApplyQueryFilter(PermConstants.DefaultGroupingPolicyType, 0, filter.G);
             }
 
             return query;
