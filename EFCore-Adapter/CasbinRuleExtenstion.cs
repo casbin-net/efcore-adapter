@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -78,14 +78,16 @@ namespace Casbin.NET.Adapter.EFCore
                 throw new ArgumentOutOfRangeException(nameof(lastIndex));
             }
 
-            query = query.Where(p => string.Equals(p.PType, policyType));
+            // query = query.Where(p => string.Equals(p.PType, policyType));
+            //  query = query.Where(p => string.Equals(p.PType, policyType));
+            query = query.Where(p => p.PType.Contains(policyType));
 
             if (fieldIndex is 0 && lastIndex > 0)
             {
                 string field = fieldValuesList[fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
                 {
-                    query = query.Where(p => p.V0 == field);
+                    query = query.Where(p => p.V0.Contains(field));
                 }
 
             }
@@ -95,7 +97,8 @@ namespace Casbin.NET.Adapter.EFCore
                 string field = fieldValuesList[1 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
                 {
-                    query = query.Where(p => p.V1 == field);
+                    //query = query.Where(p => p.V1 == field);
+                    query = query.Where(p => p.V1.Contains(field));
                 }
             }
 
@@ -104,7 +107,7 @@ namespace Casbin.NET.Adapter.EFCore
                 string field = fieldValuesList[2 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
                 {
-                    query = query.Where(p => p.V2 == field);
+                    query = query.Where(p => p.V2.Contains(field));
                 }
             }
 
@@ -113,7 +116,7 @@ namespace Casbin.NET.Adapter.EFCore
                 string field = fieldValuesList[3 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
                 {
-                    query = query.Where(p => p.V3 == field);
+                    query = query.Where(p => p.V3.Contains(field));
                 }
             }
 
@@ -122,7 +125,7 @@ namespace Casbin.NET.Adapter.EFCore
                 string field = fieldValuesList[4 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
                 {
-                    query = query.Where(p => p.V4 == field);
+                    query = query.Where(p => p.V4.Contains(field));
                 }
             }
 
@@ -131,7 +134,7 @@ namespace Casbin.NET.Adapter.EFCore
                 string field = fieldValuesList[5 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
                 {
-                    query = query.Where(p => p.V5 == field);
+                    query = query.Where(p => p.V5.Contains(field));
                 }
             }
 
