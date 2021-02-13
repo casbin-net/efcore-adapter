@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using NetCasbin.Model;
 
-namespace EFCore_Adapter.UnitTest.Fixtures
+namespace Casbin.Adapter.EFCore.UnitTest.Fixtures
 {
     public class ModelProvideFixture
     {

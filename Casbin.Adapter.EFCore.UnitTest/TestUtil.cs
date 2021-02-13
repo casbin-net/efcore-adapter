@@ -5,7 +5,7 @@ using NetCasbin;
 using NetCasbin.Util;
 using Xunit;
 
-namespace EFCore_Adapter.UnitTest
+namespace Casbin.Adapter.EFCore.UnitTest
 {
     public class TestUtil
     {
