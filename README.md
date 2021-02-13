@@ -1,6 +1,6 @@
 # EF Core Adapter
 
-[![Build Status](https://travis-ci.org/casbin-net/EFCore-Adapter.svg?branch=master)](https://travis-ci.org/casbin-net/EFCore-Adapter)
+[![Actions Status](https://github.com/casbin-net/EFCore-Adapter/workflows/Build/badge.svg)](https://github.com/casbin-net/EFCore-Adapter/actions)
 [![Coverage Status](https://coveralls.io/repos/github/casbin-net/EFCore-Adapter/badge.svg?branch=master)](https://coveralls.io/github/casbin-net/EFCore-Adapter?branch=master)
 [![NuGet](https://buildstats.info/nuget/Casbin.NET.Adapter.EFCore)](https://www.nuget.org/packages/Casbin.NET.Adapter.EFCore)
 
@@ -27,7 +27,7 @@ dotnet add package Casbin.NET.Adapter.EFCore
 ## Simple Example
 
 ```csharp
-using Casbin.NET.Adapter.EFCore;
+using Casbin.Adapter.EFCore;
 using Microsoft.EntityFrameworkCore;
 using NetCasbin;
 
@@ -48,7 +48,7 @@ namespace ConsoleAppExample
             context.Database.EnsureCreated();
 
             // Initialize a EF Core adapter and use it in a Casbin enforcer:
-            var efCoreAdapter = new CasbinDbAdapter<int>(context);
+            var efCoreAdapter = new EFCoreAdapter<int>(context);
             var e = new Enforcer("examples/rbac_model.conf", efCoreAdapter);
 
             // Load the policy from DB.

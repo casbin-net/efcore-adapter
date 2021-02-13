@@ -1,9 +1,8 @@
 ﻿using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using NetCasbin.Model;
 using NetCasbin.Persist;
 
-namespace Casbin.NET.Adapter.EFCore
+namespace Casbin.Adapter.EFCore.Extensions
 {
     public static class CasbinModelExtension
     {
@@ -16,6 +15,5 @@ namespace Casbin.NET.Adapter.EFCore
                 Helper.LoadPolicyLine(ruleString, casbinModel);
             }
         }
-
     }
 }
