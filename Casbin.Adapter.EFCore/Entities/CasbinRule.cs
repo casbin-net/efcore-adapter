@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Casbin.NET.Adapter.EFCore
+namespace Casbin.Adapter.EFCore.Entities
 {
     public class CasbinRule<TKey> : ICasbinRule<TKey> 
         where TKey : IEquatable<TKey>

@@ -2,14 +2,14 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Casbin.NET.Adapter.EFCore;
-using EFCore_Adapter.UnitTest.Fixtures;
+using Casbin.Adapter.EFCore.Entities;
+using Casbin.Adapter.EFCore.UnitTest.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using NetCasbin;
 using NetCasbin.Persist;
 using Xunit;
 
-namespace EFCore_Adapter.UnitTest
+namespace Casbin.Adapter.EFCore.UnitTest
 {
     public class AdapterTest : TestUtil, IClassFixture<ModelProvideFixture>, IDisposable
     {
@@ -91,7 +91,7 @@ namespace EFCore_Adapter.UnitTest
         [Fact]
         public void TestAdapterAutoSave()
         {
-            var adapter = new CasbinDbAdapter<int>(_context);
+            var adapter = new EFCoreAdapter<int>(_context);
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
 
             #region Load policy test
@@ -184,7 +184,7 @@ namespace EFCore_Adapter.UnitTest
         [Fact]
         public async Task TestAdapterAutoSaveAsync()
         {
-            var adapter = new CasbinDbAdapter<int, CasbinRule<int>>(_asyncContext);
+            var adapter = new EFCoreAdapter<int, CasbinRule<int>>(_asyncContext);
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
 
             #region Load policy test

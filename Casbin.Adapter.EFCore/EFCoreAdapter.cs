@@ -5,28 +5,30 @@ using System.Linq;
 using System;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
+using Casbin.Adapter.EFCore.Extensions;
+using Casbin.Adapter.EFCore.Entities;
 
-namespace Casbin.NET.Adapter.EFCore
+namespace Casbin.Adapter.EFCore
 {
-    public class CasbinDbAdapter<TKey> : CasbinDbAdapter<TKey, CasbinRule<TKey>> where TKey : IEquatable<TKey>
+    public class EFCoreAdapter<TKey> : EFCoreAdapter<TKey, CasbinRule<TKey>> where TKey : IEquatable<TKey>
     {
-        public CasbinDbAdapter(DbContext context) : base(context)
+        public EFCoreAdapter(DbContext context) : base(context)
         {
 
         }
     }
 
-    public class CasbinDbAdapter<TKey, TCasbinRule> : CasbinDbAdapter<TKey, TCasbinRule, DbContext> 
+    public class EFCoreAdapter<TKey, TCasbinRule> : EFCoreAdapter<TKey, TCasbinRule, DbContext> 
         where TCasbinRule : class, ICasbinRule<TKey>, new()
         where TKey : IEquatable<TKey>
     {
-        public CasbinDbAdapter(DbContext context) : base(context)
+        public EFCoreAdapter(DbContext context) : base(context)
         {
 
         }
     }
 
-    public class CasbinDbAdapter<TKey, TCasbinRule, TDbContext> : IAdapter, IFilteredAdapter 
+    public class EFCoreAdapter<TKey, TCasbinRule, TDbContext> : IAdapter, IFilteredAdapter 
         where TDbContext : DbContext
         where TCasbinRule : class, ICasbinRule<TKey>, new()
         where TKey : IEquatable<TKey>
@@ -35,7 +37,7 @@ namespace Casbin.NET.Adapter.EFCore
         protected DbSet<TCasbinRule> CasbinRules => _casbinRules ??= GetCasbinRuleDbSet(DbContext);
         private DbSet<TCasbinRule> _casbinRules;
 
-        public CasbinDbAdapter(TDbContext context)
+        public EFCoreAdapter(TDbContext context)
         {
             DbContext = context ?? throw new ArgumentNullException(nameof(context));
         }
