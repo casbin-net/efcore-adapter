@@ -5,7 +5,7 @@ using System.Text;
 using NetCasbin.Model;
 using NetCasbin.Persist;
 
-namespace Casbin.NET.Adapter.EFCore
+namespace Casbin.Adapter.EFCore.Extensions
 {
     public static class CasbinRuleExtenstion
     {

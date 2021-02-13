@@ -1,7 +1,8 @@
+using Casbin.Adapter.EFCore.Entities;
 using Microsoft.EntityFrameworkCore;
 using System;
 
-namespace Casbin.NET.Adapter.EFCore
+namespace Casbin.Adapter.EFCore
 {
     public partial class CasbinDbContext<TKey> : DbContext where TKey : IEquatable<TKey>
     {
@@ -15,6 +16,7 @@ namespace Casbin.NET.Adapter.EFCore
 
         public CasbinDbContext(DbContextOptions<CasbinDbContext<TKey>> options) : base(options)
         {
+            _casbinModelConfig = new DefaultCasbinRuleEntityTypeConfiguration<TKey>();
         }
 
         public CasbinDbContext(DbContextOptions<CasbinDbContext<TKey>> options, IEntityTypeConfiguration<CasbinRule<TKey>> casbinModelConfig) : base(options)
@@ -24,7 +26,7 @@ namespace Casbin.NET.Adapter.EFCore
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            if (_casbinModelConfig != null)
+            if (_casbinModelConfig is not null)
             {
                 modelBuilder.ApplyConfiguration(_casbinModelConfig);
             }
