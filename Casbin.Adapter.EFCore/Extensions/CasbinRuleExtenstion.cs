@@ -71,7 +71,7 @@ namespace Casbin.Adapter.EFCore.Extensions
                 return query;
             }
 
-            int lastIndex = fieldIndex + fieldValueCount;
+            int lastIndex = fieldIndex + fieldValueCount - 1;
 
             if (lastIndex > 5)
             {
@@ -80,17 +80,16 @@ namespace Casbin.Adapter.EFCore.Extensions
 
             query = query.Where(p => string.Equals(p.PType, policyType));
 
-            if (fieldIndex is 0 && lastIndex > 0)
+            if (fieldIndex is 0 && lastIndex >= 0)
             {
                 string field = fieldValuesList[fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
                 {
                     query = query.Where(p => p.V0 == field);
                 }
-
             }
 
-            if (fieldIndex <= 1 && lastIndex > 1)
+            if (fieldIndex <= 1 && lastIndex >= 1)
             {
                 string field = fieldValuesList[1 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
@@ -99,7 +98,7 @@ namespace Casbin.Adapter.EFCore.Extensions
                 }
             }
 
-            if (fieldIndex <= 2 && lastIndex > 2)
+            if (fieldIndex <= 2 && lastIndex >= 2)
             {
                 string field = fieldValuesList[2 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
@@ -108,7 +107,7 @@ namespace Casbin.Adapter.EFCore.Extensions
                 }
             }
 
-            if (fieldIndex <= 3 && lastIndex > 3)
+            if (fieldIndex <= 3 && lastIndex >= 3)
             {
                 string field = fieldValuesList[3 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
@@ -117,7 +116,7 @@ namespace Casbin.Adapter.EFCore.Extensions
                 }
             }
 
-            if (fieldIndex <= 4 && lastIndex > 4)
+            if (fieldIndex <= 4 && lastIndex >= 4)
             {
                 string field = fieldValuesList[4 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
@@ -126,7 +125,7 @@ namespace Casbin.Adapter.EFCore.Extensions
                 }
             }
 
-            if (lastIndex is 5)
+            if (lastIndex is 5) // and fieldIndex <= 5
             {
                 string field = fieldValuesList[5 - fieldIndex];
                 if (string.IsNullOrWhiteSpace(field) is false)
