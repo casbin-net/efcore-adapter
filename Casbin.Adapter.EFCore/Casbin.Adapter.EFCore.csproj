@@ -8,7 +8,7 @@
 
   <PropertyGroup>
     <PackageId>Casbin.NET.Adapter.EFCore</PackageId>
-    <Version>1.5.0</Version>
+    <Version>1.5.1</Version>
     <PackageIcon>casbin.png</PackageIcon>
     <Authors>Casbin.NET</Authors>
     <RepositoryType>GIT</RepositoryType>
