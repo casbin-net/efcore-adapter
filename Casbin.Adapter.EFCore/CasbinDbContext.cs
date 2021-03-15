@@ -9,6 +9,7 @@ namespace Casbin.Adapter.EFCore
         public virtual DbSet<CasbinRule<TKey>> CasbinRule { get; set; }
 
         private readonly IEntityTypeConfiguration<CasbinRule<TKey>> _casbinModelConfig;
+        private readonly string _defaultSchemaName;
 
         public CasbinDbContext()
         {
@@ -19,13 +20,18 @@ namespace Casbin.Adapter.EFCore
             _casbinModelConfig = new DefaultCasbinRuleEntityTypeConfiguration<TKey>();
         }
 
-        public CasbinDbContext(DbContextOptions<CasbinDbContext<TKey>> options, IEntityTypeConfiguration<CasbinRule<TKey>> casbinModelConfig) : base(options)
+        public CasbinDbContext(DbContextOptions<CasbinDbContext<TKey>> options, IEntityTypeConfiguration<CasbinRule<TKey>> casbinModelConfig, string defaultSchemaName = "") : base(options)
         {
             _casbinModelConfig = casbinModelConfig;
+            _defaultSchemaName = defaultSchemaName;
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            if (!string.IsNullOrEmpty(_defaultSchemaName)) {
+                modelBuilder.HasDefaultSchema(_defaultSchemaName);
+            }
+
             if (_casbinModelConfig is not null)
             {
                 modelBuilder.ApplyConfiguration(_casbinModelConfig);
