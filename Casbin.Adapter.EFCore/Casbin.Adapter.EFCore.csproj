@@ -8,13 +8,13 @@
 
   <PropertyGroup>
     <PackageId>Casbin.NET.Adapter.EFCore</PackageId>
-    <Version>1.5.1</Version>
+    <Version>1.5.2</Version>
     <PackageIcon>casbin.png</PackageIcon>
     <Authors>Casbin.NET</Authors>
     <RepositoryType>GIT</RepositoryType>
     <Copyright>Apache License 2.0</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/casbin-net/EFCore-Adapter</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/casbin-net/efcore-adapter</PackageProjectUrl>
   </PropertyGroup>
 
   <ItemGroup>
