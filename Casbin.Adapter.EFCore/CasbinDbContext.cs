@@ -15,9 +15,9 @@ namespace Casbin.Adapter.EFCore
         {
         }
 
-        public CasbinDbContext(DbContextOptions<CasbinDbContext<TKey>> options, string defaultSchemaName = null) : base(options)
+        public CasbinDbContext(DbContextOptions<CasbinDbContext<TKey>> options, string defaultSchemaName = null, string defaultTableName = "casbin_rule") : base(options)
         {
-            _casbinModelConfig = new DefaultCasbinRuleEntityTypeConfiguration<TKey>();
+            _casbinModelConfig = new DefaultCasbinRuleEntityTypeConfiguration<TKey>(defaultTableName);
             _defaultSchemaName = defaultSchemaName;
         }
 
