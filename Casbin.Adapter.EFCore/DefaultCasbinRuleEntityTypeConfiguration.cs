@@ -8,9 +8,16 @@ namespace Casbin.Adapter.EFCore
     public class DefaultCasbinRuleEntityTypeConfiguration<TKey> : IEntityTypeConfiguration<CasbinRule<TKey>> 
         where TKey : IEquatable<TKey>
     {
+        private readonly string _tableName;
+
+        public DefaultCasbinRuleEntityTypeConfiguration(string tableName)
+        {
+            _tableName = tableName;
+        }
+
         public virtual void Configure(EntityTypeBuilder<CasbinRule<TKey>> builder)
         {
-            builder.ToTable("casbin_rule");
+            builder.ToTable(_tableName);
 
             builder.Property(rule => rule.Id).HasColumnName("id");
             builder.Property(rule => rule.PType).HasColumnName("ptype");
