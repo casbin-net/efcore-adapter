@@ -84,6 +84,7 @@ namespace Casbin.Adapter.EFCore
             var casbinRules = CasbinRules.AsNoTracking();
             casbinRules = OnLoadPolicy(model, casbinRules);
             model.LoadPolicyFromCasbinRules(casbinRules.ToList());
+            IsFiltered = false;
         }
 
         public virtual async Task LoadPolicyAsync(Model model)
@@ -91,6 +92,7 @@ namespace Casbin.Adapter.EFCore
             var casbinRules = CasbinRules.AsNoTracking();
             casbinRules = OnLoadPolicy(model, casbinRules);
             model.LoadPolicyFromCasbinRules(await casbinRules.ToListAsync());
+            IsFiltered = false;
         }
 
         #endregion
@@ -290,7 +292,7 @@ namespace Casbin.Adapter.EFCore
 
         #region IFilteredAdapter
 
-        public bool IsFiltered => true;
+        public bool IsFiltered { get; private set; }
 
         public void LoadFilteredPolicy(Model model, Filter filter)
         {
@@ -298,6 +300,7 @@ namespace Casbin.Adapter.EFCore
                 .ApplyQueryFilter(filter);
             casbinRules = OnLoadPolicy(model, casbinRules);
             model.LoadPolicyFromCasbinRules(casbinRules.ToList());
+            IsFiltered = true;
         }
 
         public async Task LoadFilteredPolicyAsync(Model model, Filter filter)
@@ -306,6 +309,7 @@ namespace Casbin.Adapter.EFCore
                 .ApplyQueryFilter(filter);
             casbinRules = OnLoadPolicy(model, casbinRules);
             model.LoadPolicyFromCasbinRules(await casbinRules.ToListAsync());
+            IsFiltered = true;
         }
 
         #endregion
