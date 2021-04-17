@@ -158,8 +158,8 @@ namespace Casbin.Adapter.EFCore
             await CasbinRules.AddAsync(casbinRule);
             await DbContext.SaveChangesAsync();
         }
-        
-        public void AddPolicies(string section, string policyType, IEnumerable<IList<string>> rules)
+
+        public virtual void AddPolicies(string section, string policyType, IEnumerable<IList<string>> rules)
         {
             if (rules is null)
             {
@@ -179,7 +179,7 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public async Task AddPoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
+        public virtual async Task AddPoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
         {
             if (rules is null)
             {
@@ -248,7 +248,7 @@ namespace Casbin.Adapter.EFCore
         }
 
 
-        public void RemovePolicies(string section, string policyType, IEnumerable<IList<string>> rules)
+        public virtual void RemovePolicies(string section, string policyType, IEnumerable<IList<string>> rules)
         {
             if (rules is null)
             {
@@ -268,7 +268,7 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public async Task RemovePoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
+        public virtual async Task RemovePoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
         {
             if (rules is null)
             {
