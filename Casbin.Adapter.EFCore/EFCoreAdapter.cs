@@ -7,22 +7,27 @@ using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
 using Casbin.Adapter.EFCore.Extensions;
 using Casbin.Adapter.EFCore.Entities;
+// ReSharper disable InconsistentNaming
+// ReSharper disable MemberCanBeProtected.Global
+// ReSharper disable MemberCanBePrivate.Global
 
 namespace Casbin.Adapter.EFCore
 {
     public class EFCoreAdapter<TKey> : EFCoreAdapter<TKey, CasbinRule<TKey>> where TKey : IEquatable<TKey>
     {
-        public EFCoreAdapter(DbContext context) : base(context)
+        public EFCoreAdapter(CasbinDbContext<TKey> context) : base(context)
         {
 
         }
     }
 
-    public class EFCoreAdapter<TKey, TCasbinRule> : EFCoreAdapter<TKey, TCasbinRule, DbContext> 
+    public class EFCoreAdapter<TKey, TCasbinRule> : EFCoreAdapter<TKey, TCasbinRule, CasbinDbContext<TKey>>
         where TCasbinRule : class, ICasbinRule<TKey>, new()
         where TKey : IEquatable<TKey>
     {
-        public EFCoreAdapter(DbContext context) : base(context)
+        // For dependency injection to use.
+        // ReSharper disable once SuggestBaseTypeForParameter
+        public EFCoreAdapter(CasbinDbContext<TKey> context) : base(context)
         {
 
         }
@@ -59,9 +64,9 @@ namespace Casbin.Adapter.EFCore
             return casbinRules;
         }
 
-        protected virtual TCasbinRule OnAddPolicy(string section, string policyType, IEnumerable<string> rule, TCasbinRule casbinRules)
+        protected virtual TCasbinRule OnAddPolicy(string section, string policyType, IEnumerable<string> rule, TCasbinRule casbinRule)
         {
-            return casbinRules;
+            return casbinRule;
         }
 
         protected virtual IEnumerable<TCasbinRule> OnAddPolicies(string section, string policyType,
