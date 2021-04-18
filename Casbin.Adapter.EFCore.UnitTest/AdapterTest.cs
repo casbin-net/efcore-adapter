@@ -21,11 +21,11 @@ namespace Casbin.Adapter.EFCore.UnitTest
         {
             _modelProvideFixture = modelProvideFixture;
             var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite("Data Source=casbin_test.sqlite3")
+                .UseSqlite("Data Source=CasbinTest.db")
                 .Options;
 
             var asyncOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite("Data Source=casbin_async_test.sqlite3")
+                .UseSqlite("Data Source=CasbinAsyncTest.db")
                 .Options;
 
             _context = new CasbinDbContext<int>(options);
