@@ -51,6 +51,8 @@ namespace Casbin.Adapter.EFCore.UnitTest
 
         private static void InitPolicy(CasbinDbContext<int> context)
         {
+            context.CasbinRule.RemoveRange(context.CasbinRule);
+            context.SaveChanges();
             context.CasbinRule.Add(new CasbinRule<int>
             {
                 PType = "p",
@@ -168,15 +170,21 @@ namespace Casbin.Adapter.EFCore.UnitTest
             TestGetPolicy(enforcer, AsList(
                 AsList("bob", "data1", "read")
             ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
             Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
 
             enforcer.LoadFilteredPolicy(new Filter
             {
-                P = new List<string>{"", "", "write"},
+                P = new List<string>{"", "data2", ""},
+                G = new List<string>{"", "data2_admin"},
             });
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data2", "write")
             ));
+            TestGetGroupingPolicy(enforcer, AsList(
+                AsList("alice", "data2_admin")
+            ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
             Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
             #endregion
         }
@@ -261,15 +269,21 @@ namespace Casbin.Adapter.EFCore.UnitTest
             TestGetPolicy(enforcer, AsList(
                 AsList("bob", "data1", "read")
             ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
             Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
 
             await enforcer.LoadFilteredPolicyAsync(new Filter
             {
-                P = new List<string>{"", "", "write"},
+                P = new List<string>{"", "data2", ""},
+                G = new List<string>{"", "data2_admin"},
             });
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data2", "write")
             ));
+            TestGetGroupingPolicy(enforcer, AsList(
+                AsList("alice", "data2_admin")
+            ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
             Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
             #endregion
         }
