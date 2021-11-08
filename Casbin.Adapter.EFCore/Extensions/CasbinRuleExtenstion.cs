@@ -145,6 +145,18 @@ namespace Casbin.Adapter.EFCore.Extensions
                 return query;
             }
 
+            if (filter.P is null && filter.G is null)
+            {
+                return query;
+            }
+
+            if (filter.P is not null && filter.G is not null)
+            {
+                var queryP = query.ApplyQueryFilter(PermConstants.DefaultPolicyType, 0, filter.P);
+                var queryG = query.ApplyQueryFilter(PermConstants.DefaultGroupingPolicyType, 0, filter.G);
+                return queryP.Union(queryG);
+            }
+
             if (filter.P is not null)
             {
                 query = query.ApplyQueryFilter(PermConstants.DefaultPolicyType, 0, filter.P);
