@@ -9,10 +9,9 @@ namespace Casbin.Adapter.EFCore.Extensions
         internal static void LoadPolicyFromCasbinRules<TCasbinRule>(this Model casbinModel, IEnumerable<TCasbinRule> rules) 
             where TCasbinRule : class, ICasbinRule
         {
-            foreach (TCasbinRule rule in rules)
+            foreach (var rule in rules)
             {
-                string ruleString = rule.ConvertToString();
-                Helper.LoadPolicyLine(ruleString, casbinModel);
+                casbinModel.TryLoadPolicyLine(rule.ToList());
             }
         }
     }
