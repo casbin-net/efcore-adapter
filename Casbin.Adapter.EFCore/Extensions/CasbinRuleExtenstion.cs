@@ -9,16 +9,34 @@ namespace Casbin.Adapter.EFCore.Extensions
 {
     public static class CasbinRuleExtenstion
     {
-        internal static string ConvertToString(this ICasbinRule rule)
+        internal static List<string> ToList(this ICasbinRule rule)
         {
-            var stringBuilder = new StringBuilder(rule.PType);
-            AppendValue(stringBuilder, rule.V0);
-            AppendValue(stringBuilder, rule.V1);
-            AppendValue(stringBuilder, rule.V2);
-            AppendValue(stringBuilder, rule.V3);
-            AppendValue(stringBuilder, rule.V4);
-            AppendValue(stringBuilder, rule.V5);
-            return stringBuilder.ToString();
+            var list = new List<string> {rule.PType};
+            if (string.IsNullOrEmpty(rule.V0) is false)
+            {
+                list.Add(rule.V0);
+            }
+            if (string.IsNullOrEmpty(rule.V1) is false)
+            {
+                list.Add(rule.V1);
+            }
+            if (string.IsNullOrEmpty(rule.V2) is false)
+            {
+                list.Add(rule.V2);
+            }
+            if (string.IsNullOrEmpty(rule.V3) is false)
+            {
+                list.Add(rule.V3);
+            }
+            if (string.IsNullOrEmpty(rule.V4) is false)
+            {
+                list.Add(rule.V4);
+            }
+            if (string.IsNullOrEmpty(rule.V5) is false)
+            {
+                list.Add(rule.V5);
+            }
+            return list;
         }
 
         internal static void ReadPolicyFromCasbinModel<TCasbinRule>(this ICollection<TCasbinRule> casbinRules, Model casbinModel) 
@@ -207,16 +225,6 @@ namespace Casbin.Adapter.EFCore.Extensions
             }
 
             return rule;
-        }
-
-        private static void AppendValue(StringBuilder stringBuilder, string value)
-        {
-            if (string.IsNullOrEmpty(value))
-            {
-                return;
-            }
-            stringBuilder.Append(", ");
-            stringBuilder.Append(value);
         }
     }
 }

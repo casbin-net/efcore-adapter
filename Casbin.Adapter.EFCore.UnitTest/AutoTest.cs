@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Casbin.Adapter.EFCore.Entities;
+using Casbin.Adapter.EFCore.UnitTest.Extensions;
 using Casbin.Adapter.EFCore.UnitTest.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using NetCasbin;
@@ -11,48 +12,222 @@ using Xunit;
 
 namespace Casbin.Adapter.EFCore.UnitTest
 {
-    public class AdapterTest : TestUtil, IClassFixture<ModelProvideFixture>, IDisposable
+    public class AdapterTest : TestUtil, IClassFixture<ModelProvideFixture>, IClassFixture<DbContextProviderFixture>
     {
         private readonly ModelProvideFixture _modelProvideFixture;
-        private readonly CasbinDbContext<int> _context;
-        private readonly CasbinDbContext<int> _asyncContext;
+        private readonly DbContextProviderFixture _dbContextProviderFixture;
 
-        public AdapterTest(ModelProvideFixture modelProvideFixture)
+        public AdapterTest(ModelProvideFixture modelProvideFixture, DbContextProviderFixture dbContextProviderFixture)
         {
             _modelProvideFixture = modelProvideFixture;
-            var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite("Data Source=CasbinTest.db")
-                .Options;
-
-            var asyncOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite("Data Source=CasbinAsyncTest.db")
-                .Options;
-
-            _context = new CasbinDbContext<int>(options);
-            _context.Database.EnsureCreated();
-            _asyncContext = new CasbinDbContext<int>(asyncOptions);
-            _asyncContext.Database.EnsureCreated();
-
-            InitPolicy(_context);
-            InitPolicy(_asyncContext);
+            _dbContextProviderFixture = dbContextProviderFixture;
         }
 
-        public void Dispose()
+        [Fact]
+        public void TestAdapterAutoSave()
         {
-            Dispose(_context);
-            Dispose(_asyncContext);
+            using var context = _dbContextProviderFixture.GetContext<int>("AutoSave");
+            InitPolicy(context);
+            var adapter = new EFCoreAdapter<int>(context);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            #region Load policy test
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("data2_admin", "data2", "read"),
+                AsList("data2_admin", "data2", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 5);
+            #endregion
+
+            #region Add policy test
+            enforcer.AddPolicy("alice", "data1", "write");
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("data2_admin", "data2", "read"),
+                AsList("data2_admin", "data2", "write"),
+                AsList("alice", "data1", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 6);
+            #endregion
+
+            #region Remove poliy test
+            enforcer.RemovePolicy("alice", "data1", "write");
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("data2_admin", "data2", "read"),
+                AsList("data2_admin", "data2", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 5);
+
+            enforcer.RemoveFilteredPolicy(0, "data2_admin");
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
+
+            #region Batch APIs test
+            enforcer.AddPolicies(new []
+            {
+                new List<string>{"alice", "data2", "write"},
+                new List<string>{"bob", "data1", "read"}
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 5);
+
+            enforcer.RemovePolicies(new []
+            {
+                new List<string>{"alice", "data1", "read"},
+                new List<string>{"bob", "data2", "write"}
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
+
+            #region IFilteredAdapter test
+            enforcer.LoadFilteredPolicy(new Filter
+            {
+                P = new List<string>{"bob", "data1", "read"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+
+            enforcer.LoadFilteredPolicy(new Filter
+            {
+                P = new List<string>{"", "data2", ""},
+                G = new List<string>{"", "data2_admin"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write")
+            ));
+            TestGetGroupingPolicy(enforcer, AsList(
+                AsList("alice", "data2_admin")
+            ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
         }
 
-        private void Dispose(CasbinDbContext<int> context)
+        [Fact]
+        public async Task TestAdapterAutoSaveAsync()
         {
-            context.RemoveRange(context.CasbinRule);
-            context.SaveChanges();
-        }
+            await using var context = _dbContextProviderFixture.GetContext<int>("AutoSaveAsync");
+            InitPolicy(context);
+            var adapter = new EFCoreAdapter<int>(context);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
 
+            #region Load policy test
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("data2_admin", "data2", "read"),
+                AsList("data2_admin", "data2", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 5);
+            #endregion
+
+            #region Add policy test
+            await enforcer.AddPolicyAsync("alice", "data1", "write");
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("data2_admin", "data2", "read"),
+                AsList("data2_admin", "data2", "write"),
+                AsList("alice", "data1", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 6);
+            #endregion
+
+            #region Remove policy test
+            await enforcer.RemovePolicyAsync("alice", "data1", "write");
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("data2_admin", "data2", "read"),
+                AsList("data2_admin", "data2", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 5);
+
+            await enforcer.RemoveFilteredPolicyAsync(0, "data2_admin");
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
+
+            #region Batch APIs test
+            await enforcer.AddPoliciesAsync(new []
+            {
+                new List<string>{"alice", "data2", "write"},
+                new List<string>{"bob", "data1", "read"}
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 5);
+
+            await enforcer.RemovePoliciesAsync(new []
+            {
+                new List<string>{"alice", "data1", "read"},
+                new List<string>{"bob", "data2", "write"}
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
+
+            #region IFilteredAdapter test
+            await enforcer.LoadFilteredPolicyAsync(new Filter
+            {
+                P = new List<string>{"bob", "data1", "read"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+
+            await enforcer.LoadFilteredPolicyAsync(new Filter
+            {
+                P = new List<string>{"", "data2", ""},
+                G = new List<string>{"", "data2_admin"},
+            });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write")
+            ));
+            TestGetGroupingPolicy(enforcer, AsList(
+                AsList("alice", "data2_admin")
+            ));
+            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
+            Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
+            #endregion
+        }
+        
         private static void InitPolicy(CasbinDbContext<int> context)
         {
-            context.CasbinRule.RemoveRange(context.CasbinRule);
-            context.SaveChanges();
+            context.Clear();
             context.CasbinRule.Add(new CasbinRule<int>
             {
                 PType = "p",
@@ -88,204 +263,6 @@ namespace Casbin.Adapter.EFCore.UnitTest
                 V1 = "data2_admin",
             });
             context.SaveChanges();
-        }
-
-        [Fact]
-        public void TestAdapterAutoSave()
-        {
-            var adapter = new EFCoreAdapter<int>(_context);
-            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
-
-            #region Load policy test
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("data2_admin", "data2", "read"),
-                AsList("data2_admin", "data2", "write")
-            ));
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 5);
-            #endregion
-
-            #region Add policy test
-            enforcer.AddPolicy("alice", "data1", "write");
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("data2_admin", "data2", "read"),
-                AsList("data2_admin", "data2", "write"),
-                AsList("alice", "data1", "write")
-            ));
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 6);
-            #endregion
-
-            #region Remove poliy test
-            enforcer.RemovePolicy("alice", "data1", "write");
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("data2_admin", "data2", "read"),
-                AsList("data2_admin", "data2", "write")
-            ));
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 5);
-
-            enforcer.RemoveFilteredPolicy(0, "data2_admin");
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write")
-            ));
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
-            #endregion
-
-            #region Batch APIs test
-            enforcer.AddPolicies(new []
-            {
-                new List<string>{"alice", "data2", "write"},
-                new List<string>{"bob", "data1", "read"}
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("alice", "data2", "write"),
-                AsList("bob", "data1", "read")
-            ));
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 5);
-
-            enforcer.RemovePolicies(new []
-            {
-                new List<string>{"alice", "data1", "read"},
-                new List<string>{"bob", "data2", "write"}
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data2", "write"),
-                AsList("bob", "data1", "read")
-            ));
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
-            #endregion
-
-            #region IFilteredAdapter test
-            enforcer.LoadFilteredPolicy(new Filter
-            {
-                P = new List<string>{"bob", "data1", "read"},
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("bob", "data1", "read")
-            ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
-
-            enforcer.LoadFilteredPolicy(new Filter
-            {
-                P = new List<string>{"", "data2", ""},
-                G = new List<string>{"", "data2_admin"},
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data2", "write")
-            ));
-            TestGetGroupingPolicy(enforcer, AsList(
-                AsList("alice", "data2_admin")
-            ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
-            Assert.True(_context.CasbinRule.AsNoTracking().Count() is 3);
-            #endregion
-        }
-
-        [Fact]
-        public async Task TestAdapterAutoSaveAsync()
-        {
-            var adapter = new EFCoreAdapter<int, CasbinRule<int>>(_asyncContext);
-            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
-
-            #region Load policy test
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("data2_admin", "data2", "read"),
-                AsList("data2_admin", "data2", "write")
-            ));
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 5);
-            #endregion
-
-            #region Add policy test
-            await enforcer.AddPolicyAsync("alice", "data1", "write");
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("data2_admin", "data2", "read"),
-                AsList("data2_admin", "data2", "write"),
-                AsList("alice", "data1", "write")
-            ));
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 6);
-            #endregion
-
-            #region Remove policy test
-            await enforcer.RemovePolicyAsync("alice", "data1", "write");
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("data2_admin", "data2", "read"),
-                AsList("data2_admin", "data2", "write")
-            ));
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 5);
-
-            await enforcer.RemoveFilteredPolicyAsync(0, "data2_admin");
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write")
-            ));
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
-            #endregion
-
-            #region Batch APIs test
-            await enforcer.AddPoliciesAsync(new []
-            {
-                new List<string>{"alice", "data2", "write"},
-                new List<string>{"bob", "data1", "read"}
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data1", "read"),
-                AsList("bob", "data2", "write"),
-                AsList("alice", "data2", "write"),
-                AsList("bob", "data1", "read")
-            ));
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 5);
-
-            await enforcer.RemovePoliciesAsync(new []
-            {
-                new List<string>{"alice", "data1", "read"},
-                new List<string>{"bob", "data2", "write"}
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data2", "write"),
-                AsList("bob", "data1", "read")
-            ));
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
-            #endregion
-
-            #region IFilteredAdapter test
-            await enforcer.LoadFilteredPolicyAsync(new Filter
-            {
-                P = new List<string>{"bob", "data1", "read"},
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("bob", "data1", "read")
-            ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
-
-            await enforcer.LoadFilteredPolicyAsync(new Filter
-            {
-                P = new List<string>{"", "data2", ""},
-                G = new List<string>{"", "data2_admin"},
-            });
-            TestGetPolicy(enforcer, AsList(
-                AsList("alice", "data2", "write")
-            ));
-            TestGetGroupingPolicy(enforcer, AsList(
-                AsList("alice", "data2_admin")
-            ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
-            Assert.True(_asyncContext.CasbinRule.AsNoTracking().Count() is 3);
-            #endregion
         }
     }
 }
