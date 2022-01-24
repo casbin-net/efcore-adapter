@@ -11,6 +11,7 @@
     <PackageIcon>casbin.png</PackageIcon>
     <Authors>Casbin.NET</Authors>
     <RepositoryType>GIT</RepositoryType>
+    <RepositoryUrl>https://github.com/casbin-net/efcore-adapter</RepositoryUrl>
     <Copyright>Apache License 2.0</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/casbin-net/efcore-adapter</PackageProjectUrl>
