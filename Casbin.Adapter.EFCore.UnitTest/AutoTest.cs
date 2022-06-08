@@ -6,8 +6,8 @@ using Casbin.Adapter.EFCore.Entities;
 using Casbin.Adapter.EFCore.UnitTest.Extensions;
 using Casbin.Adapter.EFCore.UnitTest.Fixtures;
 using Microsoft.EntityFrameworkCore;
-using NetCasbin;
-using NetCasbin.Persist;
+using Casbin;
+using Casbin.Persist;
 using Xunit;
 
 namespace Casbin.Adapter.EFCore.UnitTest
@@ -30,7 +30,8 @@ namespace Casbin.Adapter.EFCore.UnitTest
             InitPolicy(context);
             var adapter = new EFCoreAdapter<int>(context);
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
-
+            enforcer.AutoSave = true;
+            
             #region Load policy test
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
@@ -105,7 +106,7 @@ namespace Casbin.Adapter.EFCore.UnitTest
             TestGetPolicy(enforcer, AsList(
                 AsList("bob", "data1", "read")
             ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
+            Assert.True(enforcer.Model.Sections["g"]["g"].Policy.Count is 0);
             Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
 
             enforcer.LoadFilteredPolicy(new Filter
@@ -119,7 +120,7 @@ namespace Casbin.Adapter.EFCore.UnitTest
             TestGetGroupingPolicy(enforcer, AsList(
                 AsList("alice", "data2_admin")
             ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
+            Assert.True(enforcer.Model.Sections["g"]["g"].Policy.Count is 1);
             Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
             #endregion
         }
@@ -206,7 +207,7 @@ namespace Casbin.Adapter.EFCore.UnitTest
             TestGetPolicy(enforcer, AsList(
                 AsList("bob", "data1", "read")
             ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 0);
+            Assert.True(enforcer.Model.Sections["g"]["g"].Policy.Count is 0);
             Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
 
             await enforcer.LoadFilteredPolicyAsync(new Filter
@@ -220,7 +221,7 @@ namespace Casbin.Adapter.EFCore.UnitTest
             TestGetGroupingPolicy(enforcer, AsList(
                 AsList("alice", "data2_admin")
             ));
-            Assert.True(enforcer.GetModel().Model["g"]["g"].Policy.Count is 1);
+            Assert.True(enforcer.Model.Sections["g"]["g"].Policy.Count is 1);
             Assert.True(context.CasbinRule.AsNoTracking().Count() is 3);
             #endregion
         }

@@ -1,15 +1,15 @@
-﻿using System.IO;
-using NetCasbin.Model;
+﻿// using System.IO;
+using Casbin.Model;
 
 namespace Casbin.Adapter.EFCore.UnitTest.Fixtures
 {
     public class ModelProvideFixture
     {
-        private readonly string _rbacModelText = File.ReadAllText("examples/rbac_model.conf");
+        private readonly string _rbacModelText = System.IO.File.ReadAllText("examples/rbac_model.conf");
 
-        public Model GetNewRbacModel()
+        public IModel GetNewRbacModel()
         {
-            return Model.CreateDefaultFromText(_rbacModelText);
+            return DefaultModel.CreateFromText(_rbacModelText);
         }
     }
 }
