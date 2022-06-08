@@ -1,6 +1,6 @@
 ﻿using Casbin.Adapter.EFCore.UnitTest.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
-using NetCasbin.Persist;
+using Casbin.Persist;
 using Xunit;
 
 namespace Casbin.Adapter.EFCore.UnitTest
