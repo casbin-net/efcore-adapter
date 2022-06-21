@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using NetCasbin;
-using NetCasbin.Util;
+using Casbin;
+using Casbin.Util;
 using Xunit;
 
 namespace Casbin.Adapter.EFCore.UnitTest
@@ -17,7 +17,58 @@ namespace Casbin.Adapter.EFCore.UnitTest
         {
             return values.ToList();
         }
-
+        
+        private static bool SetEquals(List<string> a, IEnumerable<string> b)
+        {
+            if (a == null)
+                a = new List<string>();
+            var c = new List<string>();
+            if (b != null)
+                c = b.ToList();
+            if (a.Count != c.Count)
+                return false;
+            a.Sort();
+            c.Sort();
+            for (int index = 0; index < a.Count; ++index)
+            {
+                if (!a[index].Equals(c[index]))
+                    return false;
+            }
+            return true;
+        }
+        
+        private static bool ArrayEquals(List<string> a, IEnumerable<string> b)
+        {
+            if (a == null || b == null)
+                return false;
+            if (a.Count != b.Count())
+                return false;
+            var c = b.ToList();
+            for (int index = 0; index < a.Count; ++index)
+            {
+                if (!a[index].Equals(c[index]))
+                    return false;
+            }
+            return true;
+        }
+        
+        private static bool Array2DEquals(List<List<string>> a, IEnumerable<IEnumerable<string>> b)
+        {
+            if (a == null)
+                a = new List<List<string>>();
+            var c = new List<IEnumerable<string>>();
+            if (b != null)
+                c = b.ToList();
+            if (a.Count != c.Count)
+                return false;
+            for (int index = 0; index < a.Count; ++index)
+            {
+                if (!ArrayEquals(a[index], c[index]))
+                    return false;
+            }
+            return true;
+        }
+        
         internal static void TestEnforce(Enforcer e, String sub, Object obj, String act, Boolean res)
         { 
             Assert.Equal(res, e.Enforce(sub, obj, act));
@@ -35,25 +86,25 @@ namespace Casbin.Adapter.EFCore.UnitTest
 
         internal static void TestGetPolicy(Enforcer e, List<List<String>> res)
         {
-            List<List<String>> myRes = e.GetPolicy();
-            Assert.True(Utility.Array2DEquals(res, myRes));
+            IEnumerable<IEnumerable<String>> myRes = e.GetPolicy();
+            Assert.True(Array2DEquals(res, myRes));
         }
 
         internal static void TestGetFilteredPolicy(Enforcer e, int fieldIndex, List<List<String>> res, params string[] fieldValues)
         {
-            List<List<String>> myRes = e.GetFilteredPolicy(fieldIndex, fieldValues);
-            Assert.True(Utility.Array2DEquals(res, myRes));
+            IEnumerable<IEnumerable<String>> myRes = e.GetFilteredPolicy(fieldIndex, fieldValues);
+            Assert.True(Array2DEquals(res, myRes));
         }
 
         internal static void TestGetGroupingPolicy(Enforcer e, List<List<String>> res)
         {
-            List<List<String>> myRes = e.GetGroupingPolicy(); 
+            IEnumerable<IEnumerable<String>> myRes = e.GetGroupingPolicy(); 
             Assert.Equal(res, myRes);
         }
 
         internal static void TestGetFilteredGroupingPolicy(Enforcer e, int fieldIndex, List<List<String>> res, params string[] fieldValues)
         {
-            List<List<String>> myRes = e.GetFilteredGroupingPolicy(fieldIndex, fieldValues);
+            IEnumerable<IEnumerable<String>> myRes = e.GetFilteredGroupingPolicy(fieldIndex, fieldValues);
             Assert.Equal(res, myRes);
         }
 
@@ -71,16 +122,16 @@ namespace Casbin.Adapter.EFCore.UnitTest
 
         internal static void TestGetRoles(Enforcer e, String name, List<String> res)
         {
-            List<String> myRes = e.GetRolesForUser(name);
+            IEnumerable<String> myRes = e.GetRolesForUser(name);
             string message = "Roles for " + name + ": " + myRes + ", supposed to be " + res;
-            Assert.True(Utility.SetEquals(res, myRes), message);
+            Assert.True(SetEquals(res, myRes), message);
         }
 
         internal static void TestGetUsers(Enforcer e, String name, List<String> res)
         {
-            List<String> myRes = e.GetUsersForRole(name);
+            IEnumerable<String> myRes = e.GetUsersForRole(name);
             var message = "Users for " + name + ": " + myRes + ", supposed to be " + res;
-            Assert.True(Utility.SetEquals(res, myRes),message);
+            Assert.True(SetEquals(res, myRes),message);
         }
 
         internal static void TestHasRole(Enforcer e, String name, String role, Boolean res)
@@ -91,9 +142,9 @@ namespace Casbin.Adapter.EFCore.UnitTest
 
         internal static void TestGetPermissions(Enforcer e, String name, List<List<String>> res)
         {
-            List<List<String>> myRes = e.GetPermissionsForUser(name);
+            IEnumerable<IEnumerable<String>> myRes = e.GetPermissionsForUser(name);
             var message = "Permissions for " + name + ": " + myRes + ", supposed to be " + res;
-            Assert.True(Utility.Array2DEquals(res, myRes));
+            Assert.True(Array2DEquals(res, myRes));
         }
 
         internal static void TestHasPermission(Enforcer e, String name, List<String> permission, Boolean res)
@@ -104,15 +155,15 @@ namespace Casbin.Adapter.EFCore.UnitTest
 
         internal static void TestGetRolesInDomain(Enforcer e, String name, String domain, List<String> res)
         {
-            List<String> myRes = e.GetRolesForUserInDomain(name, domain);
+            IEnumerable<String> myRes = e.GetRolesForUserInDomain(name, domain);
             var message = "Roles for " + name + " under " + domain + ": " + myRes + ", supposed to be " + res;
-            Assert.True(Utility.SetEquals(res, myRes), message);
+            Assert.True(SetEquals(res, myRes), message);
         }
 
         internal static void TestGetPermissionsInDomain(Enforcer e, String name, String domain, List<List<String>> res)
         {
-            List<List<String>> myRes = e.GetPermissionsForUserInDomain(name, domain);
-            Assert.True(Utility.Array2DEquals(res, myRes), "Permissions for " + name + " under " + domain + ": " + myRes + ", supposed to be " + res); 
+            IEnumerable<IEnumerable<String>> myRes = e.GetPermissionsForUserInDomain(name, domain);
+            Assert.True(Array2DEquals(res, myRes), "Permissions for " + name + " under " + domain + ": " + myRes + ", supposed to be " + res); 
         }
     }
 }
