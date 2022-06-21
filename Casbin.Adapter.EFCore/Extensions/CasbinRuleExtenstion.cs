@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using NetCasbin.Model;
-using NetCasbin.Persist;
+using Casbin.Model;
+using Casbin.Persist;
 
 namespace Casbin.Adapter.EFCore.Extensions
 {
@@ -39,12 +39,12 @@ namespace Casbin.Adapter.EFCore.Extensions
             return list;
         }
 
-        internal static void ReadPolicyFromCasbinModel<TCasbinRule>(this ICollection<TCasbinRule> casbinRules, Model casbinModel) 
+        internal static void ReadPolicyFromCasbinModel<TCasbinRule>(this ICollection<TCasbinRule> casbinRules, IPolicyStore casbinModel) 
             where TCasbinRule : class,ICasbinRule, new()
         {
-            if (casbinModel.Model.ContainsKey("p"))
+            if (casbinModel.Sections.ContainsKey("p"))
             {
-                foreach (var assertionKeyValuePair in casbinModel.Model["p"])
+                foreach (var assertionKeyValuePair in casbinModel.Sections["p"])
                 {
                     string policyType = assertionKeyValuePair.Key;
                     Assertion assertion = assertionKeyValuePair.Value;
@@ -56,9 +56,9 @@ namespace Casbin.Adapter.EFCore.Extensions
                     }
                 }
             }
-            if (casbinModel.Model.ContainsKey("g"))
+            if (casbinModel.Sections.ContainsKey("g"))
             {
-                foreach (var assertionKeyValuePair in casbinModel.Model["g"])
+                foreach (var assertionKeyValuePair in casbinModel.Sections["g"])
                 {
                     string policyType = assertionKeyValuePair.Key;
                     Assertion assertion = assertionKeyValuePair.Value;
@@ -188,40 +188,41 @@ namespace Casbin.Adapter.EFCore.Extensions
             return query;
         }
 
-        internal static TCasbinRule Parse<TCasbinRule>(string policyType, IList<string> ruleStrings)
+        internal static TCasbinRule Parse<TCasbinRule>(string policyType, IEnumerable<string> ruleStrings)
             where TCasbinRule : ICasbinRule, new()
         {
             var rule = new TCasbinRule{PType = policyType};
-            int count = ruleStrings.Count;
+            var strings = ruleStrings.ToList();
+            int count = strings.Count;
 
             if (count > 0)
             {
-                rule.V0 = ruleStrings[0];
+                rule.V0 = strings[0];
             }
 
             if (count > 1)
             {
-                rule.V1 = ruleStrings[1];
+                rule.V1 = strings[1];
             }
 
             if (count > 2)
             {
-                rule.V2 = ruleStrings[2];
+                rule.V2 = strings[2];
             }
 
             if (count > 3)
             {
-                rule.V3 = ruleStrings[3];
+                rule.V3 = strings[3];
             }
 
             if (count > 4)
             {
-                rule.V4 = ruleStrings[4];
+                rule.V4 = strings[4];
             }
 
             if (count > 5)
             {
-                rule.V5 = ruleStrings[5];
+                rule.V5 = strings[5];
             }
 
             return rule;

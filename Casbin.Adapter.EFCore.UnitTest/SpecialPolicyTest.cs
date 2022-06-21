@@ -1,7 +1,7 @@
 using Casbin.Adapter.EFCore.UnitTest.Extensions;
 using Casbin.Adapter.EFCore.UnitTest.Fixtures;
-using NetCasbin;
-using NetCasbin.Model;
+using Casbin;
+using Casbin.Model;
 using Xunit;
 
 namespace Casbin.Adapter.EFCore.UnitTest
@@ -23,7 +23,7 @@ namespace Casbin.Adapter.EFCore.UnitTest
             var context = _dbContextProviderFixture.GetContext<int>("CommaPolicy");
             context.Clear();
             var adapter = new EFCoreAdapter<int>(context);
-            var enforcer = new Enforcer(Model.CreateDefaultFromText(@"
+            var enforcer = new Enforcer(DefaultModel.CreateFromText(@"
 [request_definition]
 r = _
 
