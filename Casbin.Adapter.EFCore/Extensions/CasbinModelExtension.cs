@@ -1,12 +1,12 @@
 ﻿using System.Collections.Generic;
-using NetCasbin.Model;
-using NetCasbin.Persist;
+using Casbin.Model;
+using Casbin.Persist;
 
 namespace Casbin.Adapter.EFCore.Extensions
 {
     public static class CasbinModelExtension
     {
-        internal static void LoadPolicyFromCasbinRules<TCasbinRule>(this Model casbinModel, IEnumerable<TCasbinRule> rules) 
+        internal static void LoadPolicyFromCasbinRules<TCasbinRule>(this IPolicyStore casbinModel, IEnumerable<TCasbinRule> rules) 
             where TCasbinRule : class, ICasbinRule
         {
             foreach (var rule in rules)

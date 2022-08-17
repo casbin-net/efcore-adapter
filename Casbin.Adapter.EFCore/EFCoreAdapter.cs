@@ -1,5 +1,5 @@
-using NetCasbin.Persist;
-using NetCasbin.Model;
+using Casbin.Model;
+using Casbin.Persist;
 using System.Collections.Generic;
 using System.Linq;
 using System;
@@ -54,17 +54,17 @@ namespace Casbin.Adapter.EFCore
             return dbContext.Set<TCasbinRule>();
         }
 
-        protected virtual IQueryable<TCasbinRule> OnLoadPolicy(Model model, IQueryable<TCasbinRule> casbinRules)
+        protected virtual IQueryable<TCasbinRule> OnLoadPolicy(IPolicyStore model, IQueryable<TCasbinRule> casbinRules)
         {
             return casbinRules;
         }
 
-        protected virtual IEnumerable<TCasbinRule> OnSavePolicy(Model model, IEnumerable<TCasbinRule> casbinRules)
+        protected virtual IEnumerable<TCasbinRule> OnSavePolicy(IPolicyStore model, IEnumerable<TCasbinRule> casbinRules)
         {
             return casbinRules;
         }
 
-        protected virtual TCasbinRule OnAddPolicy(string section, string policyType, IEnumerable<string> rule, TCasbinRule casbinRule)
+        protected virtual TCasbinRule OnAddPolicy(string section, string policyType, IPolicyValues rule, TCasbinRule casbinRule)
         {
             return casbinRule;
         }
@@ -75,7 +75,7 @@ namespace Casbin.Adapter.EFCore
             return casbinRules;
         }
 
-        protected virtual IQueryable<TCasbinRule> OnRemoveFilteredPolicy(string section, string policyType, int fieldIndex, string[] fieldValues, IQueryable<TCasbinRule> casbinRules)
+        protected virtual IQueryable<TCasbinRule> OnRemoveFilteredPolicy(string section, string policyType, int fieldIndex, IPolicyValues fieldValues, IQueryable<TCasbinRule> casbinRules)
         {
             return casbinRules;
         }
@@ -84,7 +84,7 @@ namespace Casbin.Adapter.EFCore
 
         #region Load policy
 
-        public virtual void LoadPolicy(Model model)
+        public virtual void LoadPolicy(IPolicyStore model)
         {
             var casbinRules = CasbinRules.AsNoTracking();
             casbinRules = OnLoadPolicy(model, casbinRules);
@@ -92,7 +92,7 @@ namespace Casbin.Adapter.EFCore
             IsFiltered = false;
         }
 
-        public virtual async Task LoadPolicyAsync(Model model)
+        public virtual async Task LoadPolicyAsync(IPolicyStore model)
         {
             var casbinRules = CasbinRules.AsNoTracking();
             casbinRules = OnLoadPolicy(model, casbinRules);
@@ -104,7 +104,7 @@ namespace Casbin.Adapter.EFCore
 
         #region Save policy
 
-        public virtual void SavePolicy(Model model)
+        public virtual void SavePolicy(IPolicyStore model)
         {
             var casbinRules = new List<TCasbinRule>();
             casbinRules.ReadPolicyFromCasbinModel(model);
@@ -119,7 +119,7 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public virtual async Task SavePolicyAsync(Model model)
+        public virtual async Task SavePolicyAsync(IPolicyStore model)
         {
             var casbinRules = new List<TCasbinRule>();
             casbinRules.ReadPolicyFromCasbinModel(model);
@@ -138,7 +138,7 @@ namespace Casbin.Adapter.EFCore
 
         #region Add policy
 
-        public virtual void AddPolicy(string section, string policyType, IList<string> rule)
+        public virtual void AddPolicy(string section, string policyType, IPolicyValues rule)
         {
             if (rule is null || rule.Count is 0)
             {
@@ -151,7 +151,7 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public virtual async Task AddPolicyAsync(string section, string policyType, IList<string> rule)
+        public virtual async Task AddPolicyAsync(string section, string policyType, IPolicyValues rule)
         {
             if (rule is null || rule.Count is 0)
             {
@@ -164,14 +164,14 @@ namespace Casbin.Adapter.EFCore
             await DbContext.SaveChangesAsync();
         }
 
-        public virtual void AddPolicies(string section, string policyType, IEnumerable<IList<string>> rules)
+        public virtual void AddPolicies(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
         {
             if (rules is null)
             {
                 return;
             }
 
-            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
             if (rulesArray.Length is 0)
             {
                 return;
@@ -184,14 +184,14 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public virtual async Task AddPoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
+        public virtual async Task AddPoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
         {
             if (rules is null)
             {
                 return;
             }
 
-            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
             if (rulesArray.Length is 0)
             {
                 return;
@@ -208,7 +208,7 @@ namespace Casbin.Adapter.EFCore
 
         #region Remove policy
 
-        public virtual void RemovePolicy(string section, string policyType, IList<string> rule)
+        public virtual void RemovePolicy(string section, string policyType, IPolicyValues rule)
         {
             if (rule is null || rule.Count is 0)
             {
@@ -219,7 +219,7 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public virtual async Task RemovePolicyAsync(string section, string policyType, IList<string> rule)
+        public virtual async Task RemovePolicyAsync(string section, string policyType, IPolicyValues rule)
         {
             if (rule is null || rule.Count is 0)
             {
@@ -230,9 +230,9 @@ namespace Casbin.Adapter.EFCore
             await DbContext.SaveChangesAsync();
         }
 
-        public virtual void RemoveFilteredPolicy(string section, string policyType, int fieldIndex, params string[] fieldValues)
+        public virtual void RemoveFilteredPolicy(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
-            if (fieldValues is null || fieldValues.Length is 0)
+            if (fieldValues is null || fieldValues.Count is 0)
             {
                 return;
             }
@@ -241,9 +241,9 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public virtual async Task RemoveFilteredPolicyAsync(string section, string policyType, int fieldIndex, params string[] fieldValues)
+        public virtual async Task RemoveFilteredPolicyAsync(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
-            if (fieldValues is null || fieldValues.Length is 0)
+            if (fieldValues is null || fieldValues.Count is 0)
             {
                 return;
             }
@@ -253,14 +253,14 @@ namespace Casbin.Adapter.EFCore
         }
 
 
-        public virtual void RemovePolicies(string section, string policyType, IEnumerable<IList<string>> rules)
+        public virtual void RemovePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
         {
             if (rules is null)
             {
                 return;
             }
 
-            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
             if (rulesArray.Length is 0)
             {
                 return;
@@ -273,14 +273,14 @@ namespace Casbin.Adapter.EFCore
             DbContext.SaveChanges();
         }
 
-        public virtual async Task RemovePoliciesAsync(string section, string policyType, IEnumerable<IList<string>> rules)
+        public virtual async Task RemovePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
         {
             if (rules is null)
             {
                 return;
             }
 
-            var rulesArray = rules as IList<string>[] ?? rules.ToArray();
+            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
             if (rulesArray.Length is 0)
             {
                 return;
@@ -295,11 +295,71 @@ namespace Casbin.Adapter.EFCore
 
         #endregion
 
+        #region Update policy
+
+        public virtual void UpdatePolicy(string section, string policyType, IPolicyValues oldRule, IPolicyValues newRule)
+        {
+            if (oldRule is null || oldRule.Count is 0 || newRule is null || newRule.Count is 0)
+            {
+                return;
+            }
+
+            var casbinRuleQuery = CasbinRules.ApplyQueryFilter(policyType, 0, oldRule);
+            if(casbinRuleQuery.Count() == 0) return;
+            var casbinRule = casbinRuleQuery.FirstOrDefault();
+            casbinRule.SetValue(newRule);
+            DbContext.SaveChanges();
+        }
+
+        public virtual async Task UpdatePolicyAsync(string section, string policyType, IPolicyValues oldRule, IPolicyValues newRule)
+        {
+            if (oldRule is null || oldRule.Count is 0 || newRule is null || newRule.Count is 0)
+            {
+                return;
+            }
+
+            var casbinRuleQuery = CasbinRules.ApplyQueryFilter(policyType, 0, oldRule);
+            if(casbinRuleQuery.Count() == 0) return;
+            var casbinRule = await casbinRuleQuery.FirstOrDefaultAsync();
+            casbinRule.SetValue(newRule);
+            await DbContext.SaveChangesAsync();
+        }
+
+        public virtual void UpdatePolicies(string section, string policyType, 
+            IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
+        {
+            if (oldRules is null || newRules is null || newRules.Count  != oldRules.Count)
+            {
+                return;
+            }
+
+            for (int i = 0; i < oldRules.Count; i++)
+            {
+                UpdatePolicy(section, policyType, oldRules[i], newRules[i]);
+            }
+        }
+
+        public virtual async Task UpdatePoliciesAsync(string section, string policyType, 
+            IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
+        {
+            if (oldRules is null || newRules is null || newRules.Count  != oldRules.Count)
+            {
+                return;
+            }
+
+            for (int i = 0; i < oldRules.Count; i++)
+            {
+                UpdatePolicyAsync(section, policyType, oldRules[i], newRules[i]);
+            }
+        }
+
+        #endregion
+
         #region IFilteredAdapter
 
         public bool IsFiltered { get; private set; }
 
-        public void LoadFilteredPolicy(Model model, Filter filter)
+        public void LoadFilteredPolicy(IPolicyStore model, Filter filter)
         {
             var casbinRules = CasbinRules.AsNoTracking()
                 .ApplyQueryFilter(filter);
@@ -308,7 +368,7 @@ namespace Casbin.Adapter.EFCore
             IsFiltered = true;
         }
 
-        public async Task LoadFilteredPolicyAsync(Model model, Filter filter)
+        public async Task LoadFilteredPolicyAsync(IPolicyStore model, Filter filter)
         {
             var casbinRules = CasbinRules.AsNoTracking()
                 .ApplyQueryFilter(filter);
@@ -319,12 +379,12 @@ namespace Casbin.Adapter.EFCore
 
         #endregion
 
-        private void RemovePolicyInMemory(string section, string policyType, IEnumerable<string> rule)
+        private void RemovePolicyInMemory(string section, string policyType, IPolicyValues rule)
         {
-            RemoveFilteredPolicy(section, policyType, 0, rule as string[] ?? rule.ToArray());
+            RemoveFilteredPolicy(section, policyType, 0, rule);
         }
 
-        private void RemoveFilteredPolicyInMemory(string section, string policyType, int fieldIndex, params string[] fieldValues)
+        private void RemoveFilteredPolicyInMemory(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
             var query = CasbinRules.ApplyQueryFilter(policyType, fieldIndex, fieldValues);
 
