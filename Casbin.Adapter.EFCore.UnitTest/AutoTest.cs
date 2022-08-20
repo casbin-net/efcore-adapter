@@ -6,9 +6,9 @@ using Casbin.Adapter.EFCore.Entities;
 using Casbin.Adapter.EFCore.UnitTest.Extensions;
 using Casbin.Adapter.EFCore.UnitTest.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Xunit;
 using Casbin;
 using Casbin.Persist;
-using Xunit;
 
 namespace Casbin.Adapter.EFCore.UnitTest
 {
@@ -30,8 +30,7 @@ namespace Casbin.Adapter.EFCore.UnitTest
             InitPolicy(context);
             var adapter = new EFCoreAdapter<int>(context);
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
-            enforcer.AutoSave = true;
-            
+
             #region Load policy test
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data1", "read"),
