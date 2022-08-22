@@ -39,6 +39,30 @@ namespace Casbin.Adapter.EFCore.Extensions
             return list;
         }
 
+        internal static void SetValues(this ICasbinRule rule, IPolicyValues values)
+        {
+            if(values.Count >= 1)
+            {
+                rule.V0 = values[0];
+            }
+            if(values.Count >= 2)
+            {
+                rule.V0 = values[1];
+            }
+            if(values.Count >= 3)
+            {
+                rule.V0 = values[2];
+            }
+            if(values.Count >= 4)
+            {
+                rule.V0 = values[3];
+            }
+            if(values.Count >= 5)
+            {
+                rule.V0 = values[4];
+            }
+        }
+
         internal static void ReadPolicyFromCasbinModel<TCasbinRule>(this ICollection<TCasbinRule> casbinRules, IPolicyStore casbinModel) 
             where TCasbinRule : class,ICasbinRule, new()
         {
@@ -188,41 +212,79 @@ namespace Casbin.Adapter.EFCore.Extensions
             return query;
         }
 
-        internal static TCasbinRule Parse<TCasbinRule>(string policyType, IEnumerable<string> ruleStrings)
+        internal static TCasbinRule Parse<TCasbinRule>(string policyType, IList<string> ruleStrings)
             where TCasbinRule : ICasbinRule, new()
         {
             var rule = new TCasbinRule{PType = policyType};
-            var strings = ruleStrings.ToList();
-            int count = strings.Count;
+            int count = ruleStrings.Count;
 
             if (count > 0)
             {
-                rule.V0 = strings[0];
+                rule.V0 = ruleStrings[0];
             }
 
             if (count > 1)
             {
-                rule.V1 = strings[1];
+                rule.V1 = ruleStrings[1];
             }
 
             if (count > 2)
             {
-                rule.V2 = strings[2];
+                rule.V2 = ruleStrings[2];
             }
 
             if (count > 3)
             {
-                rule.V3 = strings[3];
+                rule.V3 = ruleStrings[3];
             }
 
             if (count > 4)
             {
-                rule.V4 = strings[4];
+                rule.V4 = ruleStrings[4];
             }
 
             if (count > 5)
             {
-                rule.V5 = strings[5];
+                rule.V5 = ruleStrings[5];
+            }
+
+            return rule;
+        }
+
+        internal static TCasbinRule Parse<TCasbinRule>(string policyType, IPolicyValues values)
+            where TCasbinRule : ICasbinRule, new()
+        {
+            var rule = new TCasbinRule{PType = policyType};
+            int count = values.Count;
+
+            if (count > 0)
+            {
+                rule.V0 = values[0];
+            }
+
+            if (count > 1)
+            {
+                rule.V1 = values[1];
+            }
+
+            if (count > 2)
+            {
+                rule.V2 = values[2];
+            }
+
+            if (count > 3)
+            {
+                rule.V3 = values[3];
+            }
+
+            if (count > 4)
+            {
+                rule.V4 = values[4];
+            }
+
+            if (count > 5)
+            {
+                rule.V5 = values[5];
             }
 
             return rule;
