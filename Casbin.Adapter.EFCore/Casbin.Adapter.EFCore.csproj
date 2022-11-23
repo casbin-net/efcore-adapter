@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netstandard2.1;netcoreapp3.1;net5.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;netstandard2.1;netcoreapp3.1;net5.0;net6.0;net7.0</TargetFrameworks>
     <AssemblyName>Casbin.Adapter.EFCore</AssemblyName>
     <LangVersion>9.0</LangVersion>
   </PropertyGroup>
@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Casbin.NET" Version="2.0.0-preview.4-build.263.preview.aa73b71" />
+    <PackageReference Include="Casbin.NET" Version="2.0.0-preview.4-build.360.preview.b498d7a" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework)' == 'net7.0'">

@@ -1,5 +1,5 @@
-using Casbin.Model;
 using Casbin.Persist;
+using Casbin.Model;
 using System.Collections.Generic;
 using System.Linq;
 using System;
@@ -13,7 +13,7 @@ using Casbin.Adapter.EFCore.Entities;
 
 namespace Casbin.Adapter.EFCore
 {
-    public class EFCoreAdapter<TKey> : EFCoreAdapter<TKey, CasbinRule<TKey>> where TKey : IEquatable<TKey>
+    public class EFCoreAdapter<TKey> : EFCoreAdapter<TKey, EFCorePersistPolicy<TKey>> where TKey : IEquatable<TKey>
     {
         public EFCoreAdapter(CasbinDbContext<TKey> context) : base(context)
         {
@@ -21,8 +21,8 @@ namespace Casbin.Adapter.EFCore
         }
     }
 
-    public class EFCoreAdapter<TKey, TCasbinRule> : EFCoreAdapter<TKey, TCasbinRule, CasbinDbContext<TKey>>
-        where TCasbinRule : class, ICasbinRule<TKey>, new()
+    public class EFCoreAdapter<TKey, TPersistPolicy> : EFCoreAdapter<TKey, TPersistPolicy, CasbinDbContext<TKey>>
+        where TPersistPolicy : class, IEFCorePersistPolicy<TKey>, new()
         where TKey : IEquatable<TKey>
     {
         // For dependency injection to use.
@@ -33,70 +33,35 @@ namespace Casbin.Adapter.EFCore
         }
     }
 
-    public class EFCoreAdapter<TKey, TCasbinRule, TDbContext> : IAdapter, IFilteredAdapter 
+    public partial class EFCoreAdapter<TKey, TPersistPolicy, TDbContext> : IAdapter, IFilteredAdapter 
         where TDbContext : DbContext
-        where TCasbinRule : class, ICasbinRule<TKey>, new()
+        where TPersistPolicy : class, IEFCorePersistPolicy<TKey>, new()
         where TKey : IEquatable<TKey>
     {
+        private DbSet<TPersistPolicy> _casbinRules;
         protected TDbContext DbContext { get; }
-        protected DbSet<TCasbinRule> CasbinRules => _casbinRules ??= GetCasbinRuleDbSet(DbContext);
-        private DbSet<TCasbinRule> _casbinRules;
+        protected DbSet<TPersistPolicy> CasbinRules => _casbinRules ??= GetCasbinRuleDbSet(DbContext);
 
         public EFCoreAdapter(TDbContext context)
         {
             DbContext = context ?? throw new ArgumentNullException(nameof(context));
         }
 
-        #region virtual method
-
-        protected virtual DbSet<TCasbinRule> GetCasbinRuleDbSet(TDbContext dbContext)
-        {
-            return dbContext.Set<TCasbinRule>();
-        }
-
-        protected virtual IQueryable<TCasbinRule> OnLoadPolicy(IPolicyStore model, IQueryable<TCasbinRule> casbinRules)
-        {
-            return casbinRules;
-        }
-
-        protected virtual IEnumerable<TCasbinRule> OnSavePolicy(IPolicyStore model, IEnumerable<TCasbinRule> casbinRules)
-        {
-            return casbinRules;
-        }
-
-        protected virtual TCasbinRule OnAddPolicy(string section, string policyType, IPolicyValues rule, TCasbinRule casbinRule)
-        {
-            return casbinRule;
-        }
-
-        protected virtual IEnumerable<TCasbinRule> OnAddPolicies(string section, string policyType,
-            IEnumerable<IEnumerable<string>> rules, IEnumerable<TCasbinRule> casbinRules)
-        {
-            return casbinRules;
-        }
-
-        protected virtual IQueryable<TCasbinRule> OnRemoveFilteredPolicy(string section, string policyType, int fieldIndex, IPolicyValues fieldValues, IQueryable<TCasbinRule> casbinRules)
-        {
-            return casbinRules;
-        }
-
-        #endregion
-
         #region Load policy
 
-        public virtual void LoadPolicy(IPolicyStore model)
+        public virtual void LoadPolicy(IPolicyStore store)
         {
             var casbinRules = CasbinRules.AsNoTracking();
-            casbinRules = OnLoadPolicy(model, casbinRules);
-            model.LoadPolicyFromCasbinRules(casbinRules.ToList());
+            casbinRules = OnLoadPolicy(store, casbinRules);
+            store.LoadPolicyFromPersistPolicy(casbinRules.ToList());
             IsFiltered = false;
         }
 
-        public virtual async Task LoadPolicyAsync(IPolicyStore model)
+        public virtual async Task LoadPolicyAsync(IPolicyStore store)
         {
             var casbinRules = CasbinRules.AsNoTracking();
-            casbinRules = OnLoadPolicy(model, casbinRules);
-            model.LoadPolicyFromCasbinRules(await casbinRules.ToListAsync());
+            casbinRules = OnLoadPolicy(store, casbinRules);
+            store.LoadPolicyFromPersistPolicy(await casbinRules.ToListAsync());
             IsFiltered = false;
         }
 
@@ -104,32 +69,32 @@ namespace Casbin.Adapter.EFCore
 
         #region Save policy
 
-        public virtual void SavePolicy(IPolicyStore model)
+        public virtual void SavePolicy(IPolicyStore store)
         {
-            var casbinRules = new List<TCasbinRule>();
-            casbinRules.ReadPolicyFromCasbinModel(model);
+            var persistPolicies = new List<TPersistPolicy>();
+            persistPolicies.ReadPolicyFromCasbinModel(store);
 
-            if (casbinRules.Count is 0)
+            if (persistPolicies.Count is 0)
             {
                 return;
             }
 
-            var saveRules = OnSavePolicy(model, casbinRules);
+            var saveRules = OnSavePolicy(store, persistPolicies);
             CasbinRules.AddRange(saveRules);
             DbContext.SaveChanges();
         }
 
-        public virtual async Task SavePolicyAsync(IPolicyStore model)
+        public virtual async Task SavePolicyAsync(IPolicyStore store)
         {
-            var casbinRules = new List<TCasbinRule>();
-            casbinRules.ReadPolicyFromCasbinModel(model);
+            var persistPolicies = new List<TPersistPolicy>();
+            persistPolicies.ReadPolicyFromCasbinModel(store);
 
-            if (casbinRules.Count is 0)
+            if (persistPolicies.Count is 0)
             {
                 return;
             }
 
-            var saveRules = OnSavePolicy(model, casbinRules);
+            var saveRules = OnSavePolicy(store, persistPolicies);
             await CasbinRules.AddRangeAsync(saveRules);
             await DbContext.SaveChangesAsync();
         }
@@ -138,69 +103,50 @@ namespace Casbin.Adapter.EFCore
 
         #region Add policy
 
-        public virtual void AddPolicy(string section, string policyType, IPolicyValues rule)
+        public virtual void AddPolicy(string section, string policyType, IPolicyValues values)
         {
-            if (rule is null || rule.Count is 0)
+            if (values is null || values.Count is 0)
             {
                 return;
             }
 
-            var casbinRule = CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, rule);
-            casbinRule = OnAddPolicy(section, policyType, rule, casbinRule);
-            CasbinRules.Add(casbinRule);
+            var persistPolicy = PersistPolicy.Create<TPersistPolicy>(section, policyType, values);
+            persistPolicy = OnAddPolicy(section, policyType, values, persistPolicy);
+            CasbinRules.Add(persistPolicy);
             DbContext.SaveChanges();
         }
 
-        public virtual async Task AddPolicyAsync(string section, string policyType, IPolicyValues rule)
+        public virtual async Task AddPolicyAsync(string section, string policyType, IPolicyValues values)
         {
-            if (rule is null || rule.Count is 0)
-            {
-                return;
-            }
-
-            var casbinRule = CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, rule);
-            casbinRule = OnAddPolicy(section, policyType, rule, casbinRule);
-            await CasbinRules.AddAsync(casbinRule);
+            var persistPolicy = PersistPolicy.Create<TPersistPolicy>(section, policyType, values);
+            persistPolicy = OnAddPolicy(section, policyType, values, persistPolicy);
+            await CasbinRules.AddAsync(persistPolicy);
             await DbContext.SaveChangesAsync();
         }
 
-        public virtual void AddPolicies(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
+        public virtual void AddPolicies(string section, string policyType,  IReadOnlyList<IPolicyValues> valuesList)
         {
-            if (rules is null)
+            if (valuesList.Count is 0)
             {
                 return;
             }
-
-            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
-            if (rulesArray.Length is 0)
-            {
-                return;
-            }
-
-            var casbinRules = rulesArray.Select(r => 
-                CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, r));
-            casbinRules = OnAddPolicies(section, policyType, rulesArray, casbinRules);
-            CasbinRules.AddRange(casbinRules);
+            var persistPolicies = valuesList.
+                Select(v => PersistPolicy.Create<TPersistPolicy>(section, policyType, v));
+            persistPolicies = OnAddPolicies(section, policyType, valuesList, persistPolicies);
+            CasbinRules.AddRange(persistPolicies);
             DbContext.SaveChanges();
         }
 
-        public virtual async Task AddPoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
+        public virtual async Task AddPoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
         {
-            if (rules is null)
+            if (valuesList.Count is 0)
             {
                 return;
             }
-
-            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
-            if (rulesArray.Length is 0)
-            {
-                return;
-            }
-
-            var casbinRules = rulesArray.Select(r => 
-                CasbinRuleExtenstion.Parse<TCasbinRule>(policyType, r));
-            casbinRules = OnAddPolicies(section, policyType, rulesArray, casbinRules);
-            await CasbinRules.AddRangeAsync(casbinRules);
+            var persistPolicies = valuesList.
+                Select(v => PersistPolicy.Create<TPersistPolicy>(section, policyType, v));
+            persistPolicies = OnAddPolicies(section, policyType, valuesList, persistPolicies);
+            await CasbinRules.AddRangeAsync(persistPolicies);
             await DbContext.SaveChangesAsync();
         }
 
@@ -208,25 +154,15 @@ namespace Casbin.Adapter.EFCore
 
         #region Remove policy
 
-        public virtual void RemovePolicy(string section, string policyType, IPolicyValues rule)
+        public virtual void RemovePolicy(string section, string policyType, IPolicyValues values)
         {
-            if (rule is null || rule.Count is 0)
-            {
-                return;
-            }
-
-            RemovePolicyInMemory(section, policyType, rule);
+            InternalRemovePolicy(section, policyType, values);
             DbContext.SaveChanges();
         }
 
-        public virtual async Task RemovePolicyAsync(string section, string policyType, IPolicyValues rule)
+        public virtual async Task RemovePolicyAsync(string section, string policyType, IPolicyValues values)
         {
-            if (rule is null || rule.Count is 0)
-            {
-                return;
-            }
-
-            RemovePolicyInMemory(section, policyType, rule);
+            InternalRemovePolicy(section, policyType, values);
             await DbContext.SaveChangesAsync();
         }
 
@@ -236,8 +172,7 @@ namespace Casbin.Adapter.EFCore
             {
                 return;
             }
-
-            RemoveFilteredPolicyInMemory(section, policyType, fieldIndex, fieldValues);
+            InternalRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues);
             DbContext.SaveChanges();
         }
 
@@ -247,48 +182,33 @@ namespace Casbin.Adapter.EFCore
             {
                 return;
             }
-
-            RemoveFilteredPolicyInMemory(section, policyType, fieldIndex, fieldValues);
+            InternalRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues);
             await DbContext.SaveChangesAsync();
         }
 
 
-        public virtual void RemovePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
+        public virtual void RemovePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
         {
-            if (rules is null)
+            if (valuesList.Count is 0)
             {
                 return;
             }
-
-            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
-            if (rulesArray.Length is 0)
+            foreach (var value in valuesList)
             {
-                return;
-            }
-
-            foreach (var rule in rulesArray)
-            {
-                RemovePolicyInMemory(section, policyType, rule);
+                InternalRemovePolicy(section, policyType, value);
             }
             DbContext.SaveChanges();
         }
 
-        public virtual async Task RemovePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> rules)
+        public virtual async Task RemovePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
         {
-            if (rules is null)
+            if (valuesList.Count is 0)
             {
                 return;
             }
-
-            var rulesArray = rules as IPolicyValues[] ?? rules.ToArray();
-            if (rulesArray.Length is 0)
+            foreach (var value in valuesList)
             {
-                return;
-            }
-
-            foreach (var rule in rulesArray)
-            {
-                RemovePolicyInMemory(section, policyType, rule);
+                InternalRemovePolicy(section, policyType, value);
             }
             await DbContext.SaveChangesAsync();
         }
@@ -296,61 +216,25 @@ namespace Casbin.Adapter.EFCore
         #endregion
 
         #region Update policy
-
-        public virtual void UpdatePolicy(string section, string policyType, IPolicyValues oldRule, IPolicyValues newRule)
+        
+        public void UpdatePolicy(string section, string policyType, IPolicyValues oldRule, IPolicyValues newRule)
         {
-            if (oldRule is null || oldRule.Count is 0 || newRule is null || newRule.Count is 0)
-            {
-                return;
-            }
-
-            var casbinRuleQuery = CasbinRules.ApplyQueryFilter(policyType, 0, oldRule);
-            if(casbinRuleQuery.Count() == 0) return;
-            var casbinRule = casbinRuleQuery.FirstOrDefault();
-            casbinRule.SetValues(newRule);
-            DbContext.SaveChanges();
+            throw new NotImplementedException();
         }
 
-        public virtual async Task UpdatePolicyAsync(string section, string policyType, IPolicyValues oldRule, IPolicyValues newRule)
+        public Task UpdatePolicyAsync(string section, string policyType, IPolicyValues oldRules, IPolicyValues newRules)
         {
-            if (oldRule is null || oldRule.Count is 0 || newRule is null || newRule.Count is 0)
-            {
-                return;
-            }
-
-            var casbinRuleQuery = CasbinRules.ApplyQueryFilter(policyType, 0, oldRule);
-            if(casbinRuleQuery.Count() == 0) return;
-            var casbinRule = await casbinRuleQuery.FirstOrDefaultAsync();
-            casbinRule.SetValues(newRule);
-            await DbContext.SaveChangesAsync();
+            throw new NotImplementedException();
         }
 
-        public virtual void UpdatePolicies(string section, string policyType, 
-            IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
+        public void UpdatePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
         {
-            if (oldRules is null || newRules is null || newRules.Count  != oldRules.Count)
-            {
-                return;
-            }
-
-            for (int i = 0; i < oldRules.Count; i++)
-            {
-                UpdatePolicy(section, policyType, oldRules[i], newRules[i]);
-            }
+            throw new NotImplementedException();
         }
 
-        public virtual async Task UpdatePoliciesAsync(string section, string policyType, 
-            IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
+        public Task UpdatePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
         {
-            if (oldRules is null || newRules is null || newRules.Count  != oldRules.Count)
-            {
-                return;
-            }
-
-            for (int i = 0; i < oldRules.Count; i++)
-            {
-                await UpdatePolicyAsync(section, policyType, oldRules[i], newRules[i]);
-            }
+            throw new NotImplementedException();
         }
 
         #endregion
@@ -358,39 +242,25 @@ namespace Casbin.Adapter.EFCore
         #region IFilteredAdapter
 
         public bool IsFiltered { get; private set; }
-
-        public void LoadFilteredPolicy(IPolicyStore model, Filter filter)
+        
+        public void LoadFilteredPolicy(IPolicyStore store, IPolicyFilter filter)
         {
-            var casbinRules = CasbinRules.AsNoTracking()
-                .ApplyQueryFilter(filter);
-            casbinRules = OnLoadPolicy(model, casbinRules);
-            model.LoadPolicyFromCasbinRules(casbinRules.ToList());
+            var persistPolicies = CasbinRules.AsNoTracking();
+            persistPolicies = filter.Apply(persistPolicies);
+            persistPolicies = OnLoadPolicy(store, persistPolicies);
+            store.LoadPolicyFromPersistPolicy(persistPolicies.ToList());
             IsFiltered = true;
         }
 
-        public async Task LoadFilteredPolicyAsync(IPolicyStore model, Filter filter)
+        public async Task LoadFilteredPolicyAsync(IPolicyStore store, IPolicyFilter filter)
         {
-            var casbinRules = CasbinRules.AsNoTracking()
-                .ApplyQueryFilter(filter);
-            casbinRules = OnLoadPolicy(model, casbinRules);
-            model.LoadPolicyFromCasbinRules(await casbinRules.ToListAsync());
+            var persistPolicies = CasbinRules.AsNoTracking();
+            persistPolicies = filter.Apply(persistPolicies);
+            persistPolicies = OnLoadPolicy(store, persistPolicies);
+            store.LoadPolicyFromPersistPolicy(await persistPolicies.ToListAsync());
             IsFiltered = true;
         }
 
         #endregion
-
-        private void RemovePolicyInMemory(string section, string policyType, IPolicyValues rule)
-        {
-            RemoveFilteredPolicy(section, policyType, 0, rule);
-        }
-
-        private void RemoveFilteredPolicyInMemory(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
-        {
-            var query = CasbinRules.ApplyQueryFilter(policyType, fieldIndex, fieldValues);
-
-            query = OnRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues, query);
-            CasbinRules.RemoveRange(query);
-        }
-
     }
 }

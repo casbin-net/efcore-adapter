@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace Casbin.Adapter.EFCore.Entities
 {
-    public class CasbinRule<TKey> : ICasbinRule<TKey> 
+    public class CasbinRule<TKey> : ICasbinRule<TKey>
         where TKey : IEquatable<TKey>
     {
         public TKey Id { get; set; }
