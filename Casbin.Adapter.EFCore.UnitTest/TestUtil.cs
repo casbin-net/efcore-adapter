@@ -86,13 +86,13 @@ namespace Casbin.Adapter.EFCore.UnitTest
 
         internal static void TestGetPolicy(Enforcer e, List<List<String>> res)
         {
-            IEnumerable<IEnumerable<String>> myRes = e.GetPolicy();
+            IEnumerable<IEnumerable<string>> myRes = e.GetPolicy();
             Assert.True(Array2DEquals(res, myRes));
         }
 
         internal static void TestGetFilteredPolicy(Enforcer e, int fieldIndex, List<List<String>> res, params string[] fieldValues)
         {
-            IEnumerable<IEnumerable<String>> myRes = e.GetFilteredPolicy(fieldIndex, fieldValues);
+            IEnumerable<IEnumerable<string>> myRes = e.GetFilteredPolicy(fieldIndex, fieldValues);
             Assert.True(Array2DEquals(res, myRes));
         }
 
