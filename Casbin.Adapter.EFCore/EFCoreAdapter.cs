@@ -38,9 +38,9 @@ namespace Casbin.Adapter.EFCore
         where TPersistPolicy : class, IEFCorePersistPolicy<TKey>, new()
         where TKey : IEquatable<TKey>
     {
-        private DbSet<TPersistPolicy> _casbinRules;
+        private DbSet<TPersistPolicy> _persistPolicies;
         protected TDbContext DbContext { get; }
-        protected DbSet<TPersistPolicy> CasbinRules => _casbinRules ??= GetCasbinRuleDbSet(DbContext);
+        protected DbSet<TPersistPolicy> PersistPolicies => _persistPolicies ??= GetCasbinRuleDbSet(DbContext);
 
         public EFCoreAdapter(TDbContext context)
         {
@@ -51,7 +51,7 @@ namespace Casbin.Adapter.EFCore
 
         public virtual void LoadPolicy(IPolicyStore store)
         {
-            var casbinRules = CasbinRules.AsNoTracking();
+            var casbinRules = PersistPolicies.AsNoTracking();
             casbinRules = OnLoadPolicy(store, casbinRules);
             store.LoadPolicyFromPersistPolicy(casbinRules.ToList());
             IsFiltered = false;
@@ -59,7 +59,7 @@ namespace Casbin.Adapter.EFCore
 
         public virtual async Task LoadPolicyAsync(IPolicyStore store)
         {
-            var casbinRules = CasbinRules.AsNoTracking();
+            var casbinRules = PersistPolicies.AsNoTracking();
             casbinRules = OnLoadPolicy(store, casbinRules);
             store.LoadPolicyFromPersistPolicy(await casbinRules.ToListAsync());
             IsFiltered = false;
@@ -80,7 +80,7 @@ namespace Casbin.Adapter.EFCore
             }
 
             var saveRules = OnSavePolicy(store, persistPolicies);
-            CasbinRules.AddRange(saveRules);
+            PersistPolicies.AddRange(saveRules);
             DbContext.SaveChanges();
         }
 
@@ -95,7 +95,7 @@ namespace Casbin.Adapter.EFCore
             }
 
             var saveRules = OnSavePolicy(store, persistPolicies);
-            await CasbinRules.AddRangeAsync(saveRules);
+            await PersistPolicies.AddRangeAsync(saveRules);
             await DbContext.SaveChangesAsync();
         }
 
@@ -105,22 +105,21 @@ namespace Casbin.Adapter.EFCore
 
         public virtual void AddPolicy(string section, string policyType, IPolicyValues values)
         {
-            if (values is null || values.Count is 0)
+            if (values.Count is 0)
             {
                 return;
             }
-
-            var persistPolicy = PersistPolicy.Create<TPersistPolicy>(section, policyType, values);
-            persistPolicy = OnAddPolicy(section, policyType, values, persistPolicy);
-            CasbinRules.Add(persistPolicy);
+            InternalAddPolicy(section, policyType, values);
             DbContext.SaveChanges();
         }
 
         public virtual async Task AddPolicyAsync(string section, string policyType, IPolicyValues values)
         {
-            var persistPolicy = PersistPolicy.Create<TPersistPolicy>(section, policyType, values);
-            persistPolicy = OnAddPolicy(section, policyType, values, persistPolicy);
-            await CasbinRules.AddAsync(persistPolicy);
+            if (values.Count is 0)
+            {
+                return;
+            }
+            await InternalAddPolicyAsync(section, policyType, values);
             await DbContext.SaveChangesAsync();
         }
 
@@ -130,10 +129,7 @@ namespace Casbin.Adapter.EFCore
             {
                 return;
             }
-            var persistPolicies = valuesList.
-                Select(v => PersistPolicy.Create<TPersistPolicy>(section, policyType, v));
-            persistPolicies = OnAddPolicies(section, policyType, valuesList, persistPolicies);
-            CasbinRules.AddRange(persistPolicies);
+            InternalAddPolicies(section, policyType, valuesList);
             DbContext.SaveChanges();
         }
 
@@ -143,10 +139,7 @@ namespace Casbin.Adapter.EFCore
             {
                 return;
             }
-            var persistPolicies = valuesList.
-                Select(v => PersistPolicy.Create<TPersistPolicy>(section, policyType, v));
-            persistPolicies = OnAddPolicies(section, policyType, valuesList, persistPolicies);
-            await CasbinRules.AddRangeAsync(persistPolicies);
+            await InternalAddPoliciesAsync(section, policyType, valuesList);
             await DbContext.SaveChangesAsync();
         }
 
@@ -156,19 +149,27 @@ namespace Casbin.Adapter.EFCore
 
         public virtual void RemovePolicy(string section, string policyType, IPolicyValues values)
         {
+            if (values.Count is 0)
+            {
+                return;
+            }
             InternalRemovePolicy(section, policyType, values);
             DbContext.SaveChanges();
         }
 
         public virtual async Task RemovePolicyAsync(string section, string policyType, IPolicyValues values)
         {
+            if (values.Count is 0)
+            {
+                return;
+            }
             InternalRemovePolicy(section, policyType, values);
             await DbContext.SaveChangesAsync();
         }
 
         public virtual void RemoveFilteredPolicy(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
-            if (fieldValues is null || fieldValues.Count is 0)
+            if (fieldValues.Count is 0)
             {
                 return;
             }
@@ -178,7 +179,7 @@ namespace Casbin.Adapter.EFCore
 
         public virtual async Task RemoveFilteredPolicyAsync(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
-            if (fieldValues is null || fieldValues.Count is 0)
+            if (fieldValues.Count is 0)
             {
                 return;
             }
@@ -193,10 +194,7 @@ namespace Casbin.Adapter.EFCore
             {
                 return;
             }
-            foreach (var value in valuesList)
-            {
-                InternalRemovePolicy(section, policyType, value);
-            }
+            InternalRemovePolicies(section, policyType, valuesList);
             DbContext.SaveChanges();
         }
 
@@ -206,10 +204,7 @@ namespace Casbin.Adapter.EFCore
             {
                 return;
             }
-            foreach (var value in valuesList)
-            {
-                InternalRemovePolicy(section, policyType, value);
-            }
+            InternalRemovePolicies(section, policyType, valuesList);
             await DbContext.SaveChangesAsync();
         }
 
@@ -217,24 +212,52 @@ namespace Casbin.Adapter.EFCore
 
         #region Update policy
         
-        public void UpdatePolicy(string section, string policyType, IPolicyValues oldRule, IPolicyValues newRule)
+        public void UpdatePolicy(string section, string policyType, IPolicyValues oldValues, IPolicyValues newValues)
         {
-            throw new NotImplementedException();
+            if (newValues.Count is 0)
+            {
+                return;
+            }
+            using var transaction = DbContext.Database.BeginTransaction();
+            InternalUpdatePolicy(section, policyType, oldValues, newValues);
+            DbContext.SaveChanges();
+            transaction.Commit();
         }
 
-        public Task UpdatePolicyAsync(string section, string policyType, IPolicyValues oldRules, IPolicyValues newRules)
+        public async Task UpdatePolicyAsync(string section, string policyType, IPolicyValues oldValues, IPolicyValues newValues)
         {
-            throw new NotImplementedException();
+            if (newValues.Count is 0)
+            {
+                return;
+            }
+            await using var transaction = await DbContext.Database.BeginTransactionAsync();
+            await InternalUpdatePolicyAsync(section, policyType, oldValues, newValues);
+            await DbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
         }
 
-        public void UpdatePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
+        public void UpdatePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> oldValuesList, IReadOnlyList<IPolicyValues> newValuesList)
         {
-            throw new NotImplementedException();
+            if (newValuesList.Count is 0)
+            {
+                return;
+            }
+            using var transaction = DbContext.Database.BeginTransaction();
+            InternalUpdatePolicies(section, policyType, oldValuesList, newValuesList);
+            DbContext.SaveChanges();
+            transaction.Commit();
         }
 
-        public Task UpdatePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> oldRules, IReadOnlyList<IPolicyValues> newRules)
+        public async Task UpdatePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> oldValuesList, IReadOnlyList<IPolicyValues> newValuesList)
         {
-            throw new NotImplementedException();
+            if (newValuesList.Count is 0)
+            {
+                return;
+            }
+            await using var transaction = await DbContext.Database.BeginTransactionAsync();
+            await InternalUpdatePoliciesAsync(section, policyType, oldValuesList, newValuesList);
+            await DbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
         }
 
         #endregion
@@ -245,7 +268,7 @@ namespace Casbin.Adapter.EFCore
         
         public void LoadFilteredPolicy(IPolicyStore store, IPolicyFilter filter)
         {
-            var persistPolicies = CasbinRules.AsNoTracking();
+            var persistPolicies = PersistPolicies.AsNoTracking();
             persistPolicies = filter.Apply(persistPolicies);
             persistPolicies = OnLoadPolicy(store, persistPolicies);
             store.LoadPolicyFromPersistPolicy(persistPolicies.ToList());
@@ -254,7 +277,7 @@ namespace Casbin.Adapter.EFCore
 
         public async Task LoadFilteredPolicyAsync(IPolicyStore store, IPolicyFilter filter)
         {
-            var persistPolicies = CasbinRules.AsNoTracking();
+            var persistPolicies = PersistPolicies.AsNoTracking();
             persistPolicies = filter.Apply(persistPolicies);
             persistPolicies = OnLoadPolicy(store, persistPolicies);
             store.LoadPolicyFromPersistPolicy(await persistPolicies.ToListAsync());

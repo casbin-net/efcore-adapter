@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Casbin.NET" Version="2.0.0-preview.4-build.360.preview.b498d7a" />
+    <PackageReference Include="Casbin.NET" Version="2.0.0-preview.4-build.361.preview.d68c806" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework)' == 'net7.0'">
