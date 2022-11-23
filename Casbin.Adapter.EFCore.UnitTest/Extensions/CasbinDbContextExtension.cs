@@ -7,7 +7,7 @@ namespace Casbin.Adapter.EFCore.UnitTest.Extensions
     {
         internal static void Clear<TKey>(this CasbinDbContext<TKey> dbContext) where TKey : IEquatable<TKey>
         {
-            dbContext.RemoveRange(dbContext.CasbinRule);
+            dbContext.RemoveRange(dbContext.Policies);
             dbContext.SaveChanges();
         }
     }
