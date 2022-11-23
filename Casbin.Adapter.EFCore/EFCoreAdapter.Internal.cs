@@ -18,17 +18,79 @@ namespace Casbin.Adapter.EFCore
         where TPersistPolicy : class, IEFCorePersistPolicy<TKey>, new()
         where TKey : IEquatable<TKey>
     {
+        private void InternalAddPolicy(string section, string policyType, IPolicyValues values)
+        {
+            var persistPolicy = PersistPolicy.Create<TPersistPolicy>(section, policyType, values);
+            persistPolicy = OnAddPolicy(section, policyType, values, persistPolicy);
+            PersistPolicies.Add(persistPolicy);
+        }
+
+        private async ValueTask InternalAddPolicyAsync(string section, string policyType, IPolicyValues values)
+        {
+            var persistPolicy = PersistPolicy.Create<TPersistPolicy>(section, policyType, values);
+            persistPolicy = OnAddPolicy(section, policyType, values, persistPolicy);
+            await PersistPolicies.AddAsync(persistPolicy);
+        }
+        
+        private void InternalUpdatePolicy(string section, string policyType, IPolicyValues oldValues , IPolicyValues newValues)
+        {
+            InternalRemovePolicy(section, policyType, oldValues);
+            InternalAddPolicy(section, policyType, newValues);
+        }
+
+        private ValueTask InternalUpdatePolicyAsync(string section, string policyType, IPolicyValues oldValues , IPolicyValues newValues)
+        {
+            InternalRemovePolicy(section, policyType, oldValues);
+            return InternalAddPolicyAsync(section, policyType, newValues);
+        }
+        
+        private void InternalAddPolicies(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
+        {
+            var persistPolicies = valuesList.
+                Select(v => PersistPolicy.Create<TPersistPolicy>(section, policyType, v));
+            persistPolicies = OnAddPolicies(section, policyType, valuesList, persistPolicies);
+            PersistPolicies.AddRange(persistPolicies);
+        }
+
+        private async ValueTask InternalAddPoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
+        {
+            var persistPolicies = valuesList.Select(v => 
+                PersistPolicy.Create<TPersistPolicy>(section, policyType, v));
+            persistPolicies = OnAddPolicies(section, policyType, valuesList, persistPolicies);
+            await PersistPolicies.AddRangeAsync(persistPolicies);
+        }
+        
+        private void InternalUpdatePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> oldValuesList, IReadOnlyList<IPolicyValues> newValuesList)
+        {
+            InternalRemovePolicies(section, policyType, oldValuesList);
+            InternalAddPolicies(section, policyType, newValuesList);
+        }
+
+        private ValueTask InternalUpdatePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> oldValuesList, IReadOnlyList<IPolicyValues> newValuesList)
+        {
+            InternalRemovePolicies(section, policyType, oldValuesList);
+            return InternalAddPoliciesAsync(section, policyType, newValuesList);
+        }
+        
         private void InternalRemovePolicy(string section, string policyType, IPolicyValues values)
         {
             RemoveFilteredPolicy(section, policyType, 0, values);
+        }
+        
+        private void InternalRemovePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
+        {
+            foreach (var value in valuesList)
+            {
+                InternalRemovePolicy(section, policyType, value);
+            }
         }
 
         private void InternalRemoveFilteredPolicy(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
             var filter = new PolicyFilter(policyType, fieldIndex, fieldValues);
-            var persistPolicies = filter.Apply(CasbinRules);
+            var persistPolicies = filter.Apply(PersistPolicies);
             persistPolicies = OnRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues, persistPolicies);
-            CasbinRules.RemoveRange(persistPolicies);
+            PersistPolicies.RemoveRange(persistPolicies);
         }
         
         #region virtual method
