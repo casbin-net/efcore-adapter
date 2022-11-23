@@ -1,4 +1,5 @@
-﻿using Casbin.Model;
+﻿// using System.IO;
+using Casbin.Model;
 
 namespace Casbin.Adapter.EFCore.UnitTest.Fixtures
 {
