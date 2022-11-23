@@ -68,6 +68,24 @@ namespace Casbin.Adapter.EFCore.UnitTest
             ));
             Assert.True(context.Policies.AsNoTracking().Count() is 3);
             #endregion
+            
+            #region Update policy test
+            enforcer.UpdatePolicy(AsList("alice", "data1", "read"), 
+                AsList("alice", "data2", "write"));
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            
+            enforcer.UpdatePolicy(AsList("alice", "data2", "write"), 
+                AsList("alice", "data1", "read"));
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            #endregion
 
             #region Batch APIs test
             enforcer.AddPolicies(new []
@@ -88,6 +106,32 @@ namespace Casbin.Adapter.EFCore.UnitTest
                 new List<string>{"alice", "data1", "read"},
                 new List<string>{"bob", "data2", "write"}
             });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            
+            enforcer.UpdatePolicies(AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ), AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            
+            enforcer.UpdatePolicies(AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ), AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data2", "write"),
                 AsList("bob", "data1", "read")
@@ -169,6 +213,24 @@ namespace Casbin.Adapter.EFCore.UnitTest
             ));
             Assert.True(context.Policies.AsNoTracking().Count() is 3);
             #endregion
+            
+            #region Update policy test
+            await enforcer.UpdatePolicyAsync(AsList("alice", "data1", "read"), 
+                AsList("alice", "data2", "write"));
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            
+            await enforcer.UpdatePolicyAsync(AsList("alice", "data2", "write"), 
+                AsList("alice", "data1", "read"));
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            #endregion
 
             #region Batch APIs test
             await enforcer.AddPoliciesAsync(new []
@@ -189,6 +251,32 @@ namespace Casbin.Adapter.EFCore.UnitTest
                 new List<string>{"alice", "data1", "read"},
                 new List<string>{"bob", "data2", "write"}
             });
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            
+            await enforcer.UpdatePoliciesAsync(AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ), AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+            Assert.True(context.Policies.AsNoTracking().Count() is 3);
+            
+            await enforcer.UpdatePoliciesAsync(AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ), AsList(
+                AsList("alice", "data2", "write"),
+                AsList("bob", "data1", "read")
+            ));
             TestGetPolicy(enforcer, AsList(
                 AsList("alice", "data2", "write"),
                 AsList("bob", "data1", "read")
