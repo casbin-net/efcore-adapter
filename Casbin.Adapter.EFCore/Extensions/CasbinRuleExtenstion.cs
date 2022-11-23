@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -39,22 +39,7 @@ namespace Casbin.Adapter.EFCore.Extensions
             return list;
         }
 
-        internal static void ReadPolicyFromCasbinModel<TPersistPolicy>(this ICollection<TPersistPolicy> persistPolicies, IPolicyStore store) 
-            where TPersistPolicy : class, IPersistPolicy, new()
-        {
-            var types = store.GetPolicyTypesAllSections();
-            foreach (var section in types)
-            {
-                foreach (var type in section.Value)
-                {
-                    var scanner = store.Scan(section.Key, type);
-                    while (scanner.GetNext(out var values))
-                    {
-                        persistPolicies.Add(PersistPolicy.Create<TPersistPolicy>(section.Key, type, values));
-                    }
-                }
-            }
-        }
+
 
         internal static IQueryable<TCasbinRule> ApplyQueryFilter<TCasbinRule>(this IQueryable<TCasbinRule> query, 
             string policyType , int fieldIndex, IEnumerable<string> fieldValues)
