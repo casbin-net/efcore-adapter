@@ -1,7 +1,6 @@
 ﻿using System;
-using Casbin.Persist;
 
-namespace Casbin.Adapter.EFCore
+namespace Casbin.Persist.Adapter.EFCore
 {
     public interface IEFCorePersistPolicy<TKey> : IPersistPolicy where TKey : IEquatable<TKey>
     {
