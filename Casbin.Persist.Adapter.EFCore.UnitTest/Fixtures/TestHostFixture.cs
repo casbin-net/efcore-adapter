@@ -1,10 +1,9 @@
 ﻿using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Casbin.Persist;
 using System;
 
-namespace Casbin.Adapter.EFCore.UnitTest.Fixtures
+namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
 {
     public class TestHostFixture
     {

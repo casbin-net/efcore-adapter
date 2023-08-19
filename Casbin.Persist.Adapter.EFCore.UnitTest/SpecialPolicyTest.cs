@@ -1,10 +1,9 @@
-using Casbin.Adapter.EFCore.UnitTest.Extensions;
-using Casbin.Adapter.EFCore.UnitTest.Fixtures;
-using Casbin;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Extensions;
 using Casbin.Model;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures;
 using Xunit;
 
-namespace Casbin.Adapter.EFCore.UnitTest
+namespace Casbin.Persist.Adapter.EFCore.UnitTest
 {
     public class SpecialPolicyTest :  IClassFixture<ModelProvideFixture>, IClassFixture<DbContextProviderFixture>
     {

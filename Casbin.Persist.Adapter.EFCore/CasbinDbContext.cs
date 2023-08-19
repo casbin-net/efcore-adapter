@@ -1,8 +1,8 @@
-using Casbin.Adapter.EFCore.Entities;
-using Microsoft.EntityFrameworkCore;
 using System;
+using Casbin.Persist.Adapter.EFCore.Entities;
+using Microsoft.EntityFrameworkCore;
 
-namespace Casbin.Adapter.EFCore
+namespace Casbin.Persist.Adapter.EFCore
 {
     public partial class CasbinDbContext<TKey> : DbContext where TKey : IEquatable<TKey>
     {

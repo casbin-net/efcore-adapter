@@ -1,7 +1,7 @@
 ﻿// using System.IO;
 using Casbin.Model;
 
-namespace Casbin.Adapter.EFCore.UnitTest.Fixtures
+namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
 {
     public class ModelProvideFixture
     {

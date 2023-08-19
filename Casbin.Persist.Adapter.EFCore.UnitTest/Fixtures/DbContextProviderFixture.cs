@@ -1,8 +1,7 @@
 using System;
-using Casbin.Adapter.EFCore.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace Casbin.Adapter.EFCore.UnitTest.Fixtures
+namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
 {
     public class DbContextProviderFixture
     {
