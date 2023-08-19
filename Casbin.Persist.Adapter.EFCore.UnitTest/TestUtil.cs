@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Casbin;
-using Casbin.Util;
 using Xunit;
 
-namespace Casbin.Adapter.EFCore.UnitTest
+namespace Casbin.Persist.Adapter.EFCore.UnitTest
 {
     public class TestUtil
     {

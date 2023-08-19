@@ -1,14 +1,13 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Casbin.Adapter.EFCore.Entities;
-using Casbin.Adapter.EFCore.UnitTest.Extensions;
-using Casbin.Adapter.EFCore.UnitTest.Fixtures;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Extensions;
 using Microsoft.EntityFrameworkCore;
-using Casbin.Persist;
+using Casbin.Persist.Adapter.EFCore.Entities;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures;
 using Xunit;
 
-namespace Casbin.Adapter.EFCore.UnitTest
+namespace Casbin.Persist.Adapter.EFCore.UnitTest
 {
     public class AdapterTest : TestUtil, IClassFixture<ModelProvideFixture>, IClassFixture<DbContextProviderFixture>
     {

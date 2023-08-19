@@ -1,8 +1,7 @@
 ﻿using System.Collections.Generic;
 using Casbin.Model;
-using Casbin.Persist;
 
-namespace Casbin.Adapter.EFCore.Extensions
+namespace Casbin.Persist.Adapter.EFCore.Extensions
 {
     public static class PolicyStoreExtension
     {
