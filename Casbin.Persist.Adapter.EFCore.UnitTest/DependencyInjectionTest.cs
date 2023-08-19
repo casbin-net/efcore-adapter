@@ -1,9 +1,8 @@
-﻿using Casbin.Adapter.EFCore.UnitTest.Fixtures;
-using Microsoft.Extensions.DependencyInjection;
-using Casbin.Persist;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures;
 using Xunit;
 
-namespace Casbin.Adapter.EFCore.UnitTest
+namespace Casbin.Persist.Adapter.EFCore.UnitTest
 {
     public class DependencyInjectionTest : IClassFixture<TestHostFixture>
     {

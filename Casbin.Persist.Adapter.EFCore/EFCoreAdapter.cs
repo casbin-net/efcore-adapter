@@ -1,17 +1,17 @@
-using Casbin.Persist;
 using Casbin.Model;
 using System.Collections.Generic;
 using System.Linq;
 using System;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
-using Casbin.Adapter.EFCore.Extensions;
-using Casbin.Adapter.EFCore.Entities;
+using Casbin.Persist.Adapter.EFCore.Extensions;
+using Casbin.Persist.Adapter.EFCore.Entities;
+
 // ReSharper disable InconsistentNaming
 // ReSharper disable MemberCanBeProtected.Global
 // ReSharper disable MemberCanBePrivate.Global
 
-namespace Casbin.Adapter.EFCore
+namespace Casbin.Persist.Adapter.EFCore
 {
     public class EFCoreAdapter<TKey> : EFCoreAdapter<TKey, EFCorePersistPolicy<TKey>> where TKey : IEquatable<TKey>
     {

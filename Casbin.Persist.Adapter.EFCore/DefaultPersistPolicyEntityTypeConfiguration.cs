@@ -1,9 +1,9 @@
-﻿using Casbin.Adapter.EFCore.Entities;
+﻿using System;
+using Casbin.Persist.Adapter.EFCore.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using System;
 
-namespace Casbin.Adapter.EFCore
+namespace Casbin.Persist.Adapter.EFCore
 {
     public class DefaultPersistPolicyEntityTypeConfiguration<TKey> : IEntityTypeConfiguration<EFCorePersistPolicy<TKey>> 
         where TKey : IEquatable<TKey>

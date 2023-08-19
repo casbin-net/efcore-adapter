@@ -40,7 +40,7 @@
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\Casbin.Adapter.EFCore\Casbin.Adapter.EFCore.csproj" />
+    <ProjectReference Include="..\Casbin.Persist.Adapter.EFCore\Casbin.Persist.Adapter.EFCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

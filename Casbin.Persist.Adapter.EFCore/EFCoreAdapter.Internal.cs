@@ -1,17 +1,15 @@
-﻿using Casbin.Persist;
-using Casbin.Model;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
-using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
-using Casbin.Adapter.EFCore.Extensions;
-using Casbin.Adapter.EFCore.Entities;
+using Casbin.Model;
+using Microsoft.EntityFrameworkCore;
+
 // ReSharper disable InconsistentNaming
 // ReSharper disable MemberCanBeProtected.Global
 // ReSharper disable MemberCanBePrivate.Global
 
-namespace Casbin.Adapter.EFCore
+namespace Casbin.Persist.Adapter.EFCore
 {
     public partial class EFCoreAdapter<TKey, TPersistPolicy, TDbContext> : IAdapter, IFilteredAdapter 
         where TDbContext : DbContext

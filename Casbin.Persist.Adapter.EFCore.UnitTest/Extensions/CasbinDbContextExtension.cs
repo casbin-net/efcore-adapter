@@ -1,7 +1,6 @@
 using System;
-using System.IO;
 
-namespace Casbin.Adapter.EFCore.UnitTest.Extensions
+namespace Casbin.Persist.Adapter.EFCore.UnitTest.Extensions
 {
     public static class CasbinDbContextExtension
     {
