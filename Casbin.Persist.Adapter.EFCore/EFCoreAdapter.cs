@@ -79,6 +79,10 @@ namespace Casbin.Persist.Adapter.EFCore
                 return;
             }
 
+            var existRule = PersistPolicies.ToList();
+            PersistPolicies.RemoveRange(existRule);
+            DbContext.SaveChanges();
+
             var saveRules = OnSavePolicy(store, persistPolicies);
             PersistPolicies.AddRange(saveRules);
             DbContext.SaveChanges();
@@ -93,6 +97,10 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+
+            var existRule = PersistPolicies.ToList();
+            PersistPolicies.RemoveRange(existRule);
+            await DbContext.SaveChangesAsync();
 
             var saveRules = OnSavePolicy(store, persistPolicies);
             await PersistPolicies.AddRangeAsync(saveRules);
@@ -109,6 +117,15 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+
+            var filter = new PolicyFilter(policyType, 0, values);
+            var persistPolicies = filter.Apply(PersistPolicies);
+
+            if (persistPolicies.Any())
+            {
+                return;
+            }
+
             InternalAddPolicy(section, policyType, values);
             DbContext.SaveChanges();
         }
@@ -119,6 +136,15 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+
+            var filter = new PolicyFilter(policyType, 0, values);
+            var persistPolicies = filter.Apply(PersistPolicies);
+
+            if (persistPolicies.Any())
+            {
+                return;
+            }
+
             await InternalAddPolicyAsync(section, policyType, values);
             await DbContext.SaveChangesAsync();
         }
