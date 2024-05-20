@@ -14,7 +14,9 @@ namespace Casbin.Persist.Adapter.EFCore.Extensions
                 {
                     policy.Section = policy.Type.Substring(0, 1);
                 }
-                store.AddPolicy(policy.Section, policy.Type, Policy.ValuesFrom(policy));
+                var requiredCount = store.GetRequiredValuesCount(policy.Section, policy.Type);
+                var values = Policy.ValuesFrom(policy, requiredCount);
+                store.AddPolicy(policy.Section, policy.Type, values);
             }
         }
         
