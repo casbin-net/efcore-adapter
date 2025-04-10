@@ -53,6 +53,5 @@ namespace Casbin.Persist.Adapter.EFCore
                 modelBuilder.ApplyConfiguration(_casbinModelConfig);
             }
         }
-
     }
 }
