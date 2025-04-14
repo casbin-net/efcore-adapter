@@ -31,6 +31,7 @@ jobs:
             6.0.x
             7.0.x
             8.0.x
+            9.0.x
         include-prerelease: true
 
     - name: Check .NET info
@@ -68,7 +69,7 @@ jobs:
         }
 
     - name: Upload test results artefacts
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v4
       with:
         name: "drop-ci-test-results"
         path: './test-results'
@@ -114,6 +115,7 @@ jobs:
             6.0.x
             7.0.x
             8.0.x
+            9.0.x
         include-prerelease: true
 
     - name: Check .NET info
@@ -134,7 +136,7 @@ jobs:
         dotnet pack -c Release -o packages /p:PackageVersion=$Version /p:Version=$Version;
 
     - name: Upload packages artefacts
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v4
       with:
         name: "drop-ci-packages"
         path: './packages'
