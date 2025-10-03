@@ -3,6 +3,7 @@ using Casbin.Model;
 using Casbin.Persist.Adapter.EFCore.Entities;
 using Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures;
 using Xunit;
+using System;
 
 namespace Casbin.Persist.Adapter.EFCore.UnitTest
 {
@@ -40,7 +41,9 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
                     m = eval(p.rule)
                 """
             ), adapter);
-            enforcer.AddFunction("equal", (a1, a2) => a1 == a2);
+
+            enforcer.AddFunction<Func<object, object, bool>>("equal", (a1, a2) => a1 == a2);
+//            enforcer.AddFunction("equal", (a1, a2) => a1 == a2);
 
             enforcer.AddPolicy("equal(p.a1, p.a2)", "a1", "a1");
             Assert.True(enforcer.Enforce("_"));
