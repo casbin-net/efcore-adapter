@@ -43,7 +43,6 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
             ), adapter);
 
             enforcer.AddFunction<Func<object, object, bool>>("equal", (a1, a2) => a1 == a2);
-//            enforcer.AddFunction("equal", (a1, a2) => a1 == a2);
 
             enforcer.AddPolicy("equal(p.a1, p.a2)", "a1", "a1");
             Assert.True(enforcer.Enforce("_"));
