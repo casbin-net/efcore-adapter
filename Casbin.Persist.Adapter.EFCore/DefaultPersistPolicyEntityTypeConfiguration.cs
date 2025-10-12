@@ -34,8 +34,6 @@ namespace Casbin.Persist.Adapter.EFCore
             builder.Ignore(p => p.Value10);
             builder.Ignore(p => p.Value11);
             builder.Ignore(p => p.Value12);
-            builder.Ignore(p => p.Value13);
-            builder.Ignore(p => p.Value14);
 
             builder.HasIndex(p => p.Type);
             builder.HasIndex(p => p.Value1);
