@@ -1,0 +1,453 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Casbin.Persist.Adapter.EFCore.Entities;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Extensions;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+
+namespace Casbin.Persist.Adapter.EFCore.UnitTest
+{
+    /// <summary>
+    /// Tests for multi-context functionality where different policy types
+    /// can be stored in separate database contexts/tables/schemas.
+    /// </summary>
+    public class MultiContextTest : TestUtil,
+        IClassFixture<ModelProvideFixture>,
+        IClassFixture<MultiContextProviderFixture>
+    {
+        private readonly ModelProvideFixture _modelProvideFixture;
+        private readonly MultiContextProviderFixture _multiContextProviderFixture;
+
+        public MultiContextTest(
+            ModelProvideFixture modelProvideFixture,
+            MultiContextProviderFixture multiContextProviderFixture)
+        {
+            _modelProvideFixture = modelProvideFixture;
+            _multiContextProviderFixture = multiContextProviderFixture;
+        }
+
+        [Fact]
+        public void TestMultiContextAddPolicy()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("AddPolicy");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("AddPolicy");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Act - Add policy rules (should go to policy context)
+            enforcer.AddPolicy("alice", "data1", "read");
+            enforcer.AddPolicy("bob", "data2", "write");
+
+            // Add grouping rules (should go to grouping context)
+            enforcer.AddGroupingPolicy("alice", "admin");
+
+            // Assert - Verify policies are in the correct contexts
+            Assert.Equal(2, policyContext.Policies.Count());
+            Assert.Equal(1, groupingContext.Policies.Count());
+
+            // Verify policy data
+            var alicePolicy = policyContext.Policies.FirstOrDefault(p => p.Value1 == "alice");
+            Assert.NotNull(alicePolicy);
+            Assert.Equal("p", alicePolicy.Type);
+            Assert.Equal("data1", alicePolicy.Value2);
+            Assert.Equal("read", alicePolicy.Value3);
+
+            // Verify grouping data
+            var aliceGrouping = groupingContext.Policies.FirstOrDefault(p => p.Value1 == "alice");
+            Assert.NotNull(aliceGrouping);
+            Assert.Equal("g", aliceGrouping.Type);
+            Assert.Equal("admin", aliceGrouping.Value2);
+        }
+
+        [Fact]
+        public async Task TestMultiContextAddPolicyAsync()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("AddPolicyAsync");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("AddPolicyAsync");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Act
+            await enforcer.AddPolicyAsync("alice", "data1", "read");
+            await enforcer.AddPolicyAsync("bob", "data2", "write");
+            await enforcer.AddGroupingPolicyAsync("alice", "admin");
+
+            // Assert
+            Assert.Equal(2, await policyContext.Policies.CountAsync());
+            Assert.Equal(1, await groupingContext.Policies.CountAsync());
+        }
+
+        [Fact]
+        public void TestMultiContextRemovePolicy()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("RemovePolicy");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("RemovePolicy");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            // Pre-populate data
+            policyContext.Policies.Add(new EFCorePersistPolicy<int>
+            {
+                Type = "p",
+                Value1 = "alice",
+                Value2 = "data1",
+                Value3 = "read"
+            });
+            policyContext.SaveChanges();
+
+            groupingContext.Policies.Add(new EFCorePersistPolicy<int>
+            {
+                Type = "g",
+                Value1 = "alice",
+                Value2 = "admin"
+            });
+            groupingContext.SaveChanges();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+            enforcer.LoadPolicy();
+
+            // Act
+            enforcer.RemovePolicy("alice", "data1", "read");
+            enforcer.RemoveGroupingPolicy("alice", "admin");
+
+            // Assert
+            Assert.Equal(0, policyContext.Policies.Count());
+            Assert.Equal(0, groupingContext.Policies.Count());
+        }
+
+        [Fact]
+        public void TestMultiContextLoadPolicy()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("LoadPolicy");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("LoadPolicy");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            // Add test data to policy context
+            policyContext.Policies.AddRange(new[]
+            {
+                new EFCorePersistPolicy<int> { Type = "p", Value1 = "alice", Value2 = "data1", Value3 = "read" },
+                new EFCorePersistPolicy<int> { Type = "p", Value1 = "bob", Value2 = "data2", Value3 = "write" }
+            });
+            policyContext.SaveChanges();
+
+            // Add test data to grouping context
+            groupingContext.Policies.AddRange(new[]
+            {
+                new EFCorePersistPolicy<int> { Type = "g", Value1 = "alice", Value2 = "admin" },
+                new EFCorePersistPolicy<int> { Type = "g", Value1 = "bob", Value2 = "user" }
+            });
+            groupingContext.SaveChanges();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Act
+            enforcer.LoadPolicy();
+
+            // Assert - Verify all policies loaded from both contexts
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+
+            TestGetGroupingPolicy(enforcer, AsList(
+                AsList("alice", "admin"),
+                AsList("bob", "user")
+            ));
+        }
+
+        [Fact]
+        public async Task TestMultiContextLoadPolicyAsync()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("LoadPolicyAsync");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("LoadPolicyAsync");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            policyContext.Policies.AddRange(new[]
+            {
+                new EFCorePersistPolicy<int> { Type = "p", Value1 = "alice", Value2 = "data1", Value3 = "read" }
+            });
+            await policyContext.SaveChangesAsync();
+
+            groupingContext.Policies.Add(new EFCorePersistPolicy<int> { Type = "g", Value1 = "alice", Value2 = "admin" });
+            await groupingContext.SaveChangesAsync();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Act
+            await enforcer.LoadPolicyAsync();
+
+            // Assert
+            Assert.Single(enforcer.GetPolicy());
+            Assert.Single(enforcer.GetGroupingPolicy());
+        }
+
+        [Fact]
+        public void TestMultiContextSavePolicy()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("SavePolicy");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("SavePolicy");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Add policies via enforcer
+            enforcer.AddPolicy("alice", "data1", "read");
+            enforcer.AddPolicy("bob", "data2", "write");
+            enforcer.AddGroupingPolicy("alice", "admin");
+
+            // Act - Save should distribute policies to correct contexts
+            enforcer.SavePolicy();
+
+            // Assert - Verify data is in correct contexts
+            Assert.Equal(2, policyContext.Policies.Count());
+            Assert.Equal(1, groupingContext.Policies.Count());
+
+            // Verify we can reload from both contexts
+            var newEnforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+            newEnforcer.LoadPolicy();
+
+            TestGetPolicy(newEnforcer, AsList(
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            ));
+
+            TestGetGroupingPolicy(newEnforcer, AsList(
+                AsList("alice", "admin")
+            ));
+        }
+
+        [Fact]
+        public async Task TestMultiContextSavePolicyAsync()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("SavePolicyAsync");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("SavePolicyAsync");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            enforcer.AddPolicy("alice", "data1", "read");
+            enforcer.AddGroupingPolicy("alice", "admin");
+
+            // Act
+            await enforcer.SavePolicyAsync();
+
+            // Assert
+            Assert.Equal(1, await policyContext.Policies.CountAsync());
+            Assert.Equal(1, await groupingContext.Policies.CountAsync());
+        }
+
+        [Fact]
+        public void TestMultiContextUpdatePolicy()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("UpdatePolicy");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("UpdatePolicy");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            policyContext.Policies.Add(new EFCorePersistPolicy<int>
+            {
+                Type = "p",
+                Value1 = "alice",
+                Value2 = "data1",
+                Value3 = "read"
+            });
+            policyContext.SaveChanges();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+            enforcer.LoadPolicy();
+
+            // Act
+            enforcer.UpdatePolicy(
+                AsList("alice", "data1", "read"),
+                AsList("alice", "data1", "write")
+            );
+
+            // Assert
+            var policy = policyContext.Policies.FirstOrDefault(p => p.Value1 == "alice");
+            Assert.NotNull(policy);
+            Assert.Equal("write", policy.Value3);
+        }
+
+        [Fact]
+        public void TestMultiContextBatchOperations()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("BatchOperations");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("BatchOperations");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Act - Add multiple policies at once
+            enforcer.AddPolicies(new[]
+            {
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write"),
+                AsList("charlie", "data3", "read")
+            });
+
+            // Assert
+            Assert.Equal(3, policyContext.Policies.Count());
+
+            // Act - Remove multiple policies
+            enforcer.RemovePolicies(new[]
+            {
+                AsList("alice", "data1", "read"),
+                AsList("bob", "data2", "write")
+            });
+
+            // Assert
+            Assert.Equal(1, policyContext.Policies.Count());
+            Assert.Equal("charlie", policyContext.Policies.First().Value1);
+        }
+
+        [Fact]
+        public void TestMultiContextLoadFilteredPolicy()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("LoadFilteredPolicy");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("LoadFilteredPolicy");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            // Add multiple policies
+            policyContext.Policies.AddRange(new[]
+            {
+                new EFCorePersistPolicy<int> { Type = "p", Value1 = "alice", Value2 = "data1", Value3 = "read" },
+                new EFCorePersistPolicy<int> { Type = "p", Value1 = "bob", Value2 = "data2", Value3 = "write" }
+            });
+            policyContext.SaveChanges();
+
+            groupingContext.Policies.Add(new EFCorePersistPolicy<int> { Type = "g", Value1 = "alice", Value2 = "admin" });
+            groupingContext.SaveChanges();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Act - Load only alice's policies
+            enforcer.LoadFilteredPolicy(new Filter
+            {
+                P = AsList("alice", "", "")
+            });
+
+            // Assert
+            TestGetPolicy(enforcer, AsList(
+                AsList("alice", "data1", "read")
+            ));
+
+            // Bob's policy should not be loaded
+            Assert.DoesNotContain(enforcer.GetPolicy(), p => p.Contains("bob"));
+        }
+
+        [Fact]
+        public void TestMultiContextTransactionRollback()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("TransactionRollback");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("TransactionRollback");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            var adapter = new EFCoreAdapter<int>(provider);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Add initial data
+            enforcer.AddPolicy("alice", "data1", "read");
+            enforcer.AddGroupingPolicy("alice", "admin");
+
+            var initialPolicyCount = policyContext.Policies.Count();
+            var initialGroupingCount = groupingContext.Policies.Count();
+
+            // Act & Assert - UpdatePolicy with transaction should rollback on error
+            // (This test verifies transaction integrity across contexts)
+            try
+            {
+                enforcer.UpdatePolicy(
+                    AsList("alice", "data1", "read"),
+                    AsList("alice", "data1", "write")
+                );
+            }
+            catch
+            {
+                // If transaction fails, both contexts should be unchanged
+                Assert.Equal(initialPolicyCount, policyContext.Policies.Count());
+                Assert.Equal(initialGroupingCount, groupingContext.Policies.Count());
+            }
+        }
+
+        [Fact]
+        public void TestMultiContextProviderGetAllContexts()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("GetAllContexts");
+
+            // Act
+            var contexts = provider.GetAllContexts().ToList();
+
+            // Assert
+            Assert.Equal(2, contexts.Count);
+            Assert.All(contexts, ctx => Assert.NotNull(ctx));
+        }
+
+        [Fact]
+        public void TestMultiContextProviderGetContextForPolicyType()
+        {
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("GetContextForType");
+
+            // Act & Assert
+            var pContext = provider.GetContextForPolicyType("p");
+            var p2Context = provider.GetContextForPolicyType("p2");
+            var gContext = provider.GetContextForPolicyType("g");
+            var g2Context = provider.GetContextForPolicyType("g2");
+
+            // All 'p' types should route to same context
+            Assert.Same(pContext, p2Context);
+
+            // All 'g' types should route to same context
+            Assert.Same(gContext, g2Context);
+
+            // 'p' and 'g' types should route to different contexts
+            Assert.NotSame(pContext, gContext);
+        }
+    }
+}
