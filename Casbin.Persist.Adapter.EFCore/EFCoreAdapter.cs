@@ -168,9 +168,15 @@ namespace Casbin.Persist.Adapter.EFCore
                     }
 
                     var dbSet = GetCasbinRuleDbSet(context, null);
+#if NET7_0_OR_GREATER
+                    // EF Core 7+: Use ExecuteDelete for better performance (set-based delete without loading entities)
+                    dbSet.ExecuteDelete();
+#else
+                    // EF Core 3.1-6.0: Fall back to traditional approach
                     var existingRules = dbSet.ToList();
                     dbSet.RemoveRange(existingRules);
                     context.SaveChanges();
+#endif
                 }
 
                 // Add new policies to respective contexts
@@ -204,9 +210,15 @@ namespace Casbin.Persist.Adapter.EFCore
                 {
                     // Clear existing policies from this context
                     var dbSet = GetCasbinRuleDbSet(context, null);
+#if NET7_0_OR_GREATER
+                    // EF Core 7+: Use ExecuteDelete for better performance (set-based delete without loading entities)
+                    dbSet.ExecuteDelete();
+#else
+                    // EF Core 3.1-6.0: Fall back to traditional approach
                     var existingRules = dbSet.ToList();
                     dbSet.RemoveRange(existingRules);
                     context.SaveChanges();
+#endif
 
                     // Add new policies to this context
                     var policiesForContext = policiesByContext.FirstOrDefault(g => g.Key == context);
@@ -309,9 +321,15 @@ namespace Casbin.Persist.Adapter.EFCore
                     }
 
                     var dbSet = GetCasbinRuleDbSet(context, null);
+#if NET7_0_OR_GREATER
+                    // EF Core 7+: Use ExecuteDeleteAsync for better performance (set-based delete without loading entities)
+                    await dbSet.ExecuteDeleteAsync();
+#else
+                    // EF Core 3.1-6.0: Fall back to traditional approach
                     var existingRules = await dbSet.ToListAsync();
                     dbSet.RemoveRange(existingRules);
                     await context.SaveChangesAsync();
+#endif
                 }
 
                 // Add new policies to respective contexts
@@ -345,9 +363,15 @@ namespace Casbin.Persist.Adapter.EFCore
                 {
                     // Clear existing policies from this context
                     var dbSet = GetCasbinRuleDbSet(context, null);
+#if NET7_0_OR_GREATER
+                    // EF Core 7+: Use ExecuteDeleteAsync for better performance (set-based delete without loading entities)
+                    await dbSet.ExecuteDeleteAsync();
+#else
+                    // EF Core 3.1-6.0: Fall back to traditional approach
                     var existingRules = await dbSet.ToListAsync();
                     dbSet.RemoveRange(existingRules);
                     await context.SaveChangesAsync();
+#endif
 
                     // Add new policies to this context
                     var policiesForContext = policiesByContext.FirstOrDefault(g => g.Key == context);
