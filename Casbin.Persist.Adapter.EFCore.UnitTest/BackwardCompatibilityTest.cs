@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Casbin.Persist.Adapter.EFCore.Entities;
+using Casbin.Persist.Adapter.EFCore.UnitTest.Extensions;
 using Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Xunit;

@@ -12,48 +12,55 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
 
         /// <summary>
         /// Creates a multi-context provider with separate contexts for policy and grouping rules.
-        /// Both contexts share the same database but use different table names.
+        /// Uses separate database files with the same table name for proper isolation.
+        /// This approach avoids SQLite transaction limitations across tables.
         /// </summary>
         /// <param name="testName">Unique name for this test to avoid database conflicts</param>
         /// <returns>A PolicyTypeContextProvider configured for testing</returns>
         public PolicyTypeContextProvider GetMultiContextProvider(string testName)
         {
-            var dbName = $"MultiContext_{testName}.db";
+            // Use separate database files for proper isolation
+            var policyDbName = $"MultiContext_{testName}_policy.db";
+            var groupingDbName = $"MultiContext_{testName}_grouping.db";
 
-            // Create policy context with "casbin_policy" table
+            // Create policy context with its own database and default table name
             var policyOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite($"Data Source={dbName}")
+                .UseSqlite($"Data Source={policyDbName}")
                 .Options;
-            var policyContext = new CasbinDbContext<int>(policyOptions, schemaName: null, tableName: "casbin_policy");
+            var policyContext = new CasbinDbContext<int>(policyOptions);
             policyContext.Database.EnsureCreated();
 
-            // Create grouping context with "casbin_grouping" table (same database)
+            // Create grouping context with its own database and default table name
             var groupingOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite($"Data Source={dbName}")
+                .UseSqlite($"Data Source={groupingDbName}")
                 .Options;
-            var groupingContext = new CasbinDbContext<int>(groupingOptions, schemaName: null, tableName: "casbin_grouping");
+            var groupingContext = new CasbinDbContext<int>(groupingOptions);
             groupingContext.Database.EnsureCreated();
 
             return new PolicyTypeContextProvider(policyContext, groupingContext);
         }
 
         /// <summary>
-        /// Gets separate contexts for direct verification in tests
+        /// Gets separate contexts for direct verification in tests.
+        /// Returns NEW context instances pointing to the same databases as the provider.
         /// </summary>
         public (CasbinDbContext<int> policyContext, CasbinDbContext<int> groupingContext) GetSeparateContexts(string testName)
         {
-            var dbName = $"MultiContext_{testName}.db";
+            // Use same database file names as GetMultiContextProvider
+            var policyDbName = $"MultiContext_{testName}_policy.db";
+            var groupingDbName = $"MultiContext_{testName}_grouping.db";
 
+            // Create new context instances that point to the same database files
             var policyOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite($"Data Source={dbName}")
+                .UseSqlite($"Data Source={policyDbName}")
                 .Options;
-            var policyContext = new CasbinDbContext<int>(policyOptions, schemaName: null, tableName: "casbin_policy");
+            var policyContext = new CasbinDbContext<int>(policyOptions);
             policyContext.Database.EnsureCreated();
 
             var groupingOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlite($"Data Source={dbName}")
+                .UseSqlite($"Data Source={groupingDbName}")
                 .Options;
-            var groupingContext = new CasbinDbContext<int>(groupingOptions, schemaName: null, tableName: "casbin_grouping");
+            var groupingContext = new CasbinDbContext<int>(groupingOptions);
             groupingContext.Database.EnsureCreated();
 
             return (policyContext, groupingContext);

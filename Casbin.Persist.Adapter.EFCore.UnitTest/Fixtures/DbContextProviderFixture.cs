@@ -11,7 +11,14 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
                 .UseSqlite($"Data Source={name}.db")
                 .Options;
             var context = new CasbinDbContext<TKey>(options);
+
+            // Ensure database and tables are created
             context.Database.EnsureCreated();
+
+            // Force model to be initialized by accessing a property
+            // This ensures the DbSet is properly configured
+            _ = context.Model;
+
             return context;
         }
     }
