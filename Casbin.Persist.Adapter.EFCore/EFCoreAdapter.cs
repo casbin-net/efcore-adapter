@@ -52,7 +52,7 @@ namespace Casbin.Persist.Adapter.EFCore
     {
         private DbSet<TPersistPolicy> _persistPolicies;
         private readonly ICasbinDbContextProvider<TKey> _contextProvider;
-        private readonly Dictionary<DbContext, DbSet<TPersistPolicy>> _persistPoliciesByContext;
+        private readonly Dictionary<(DbContext context, string policyType), DbSet<TPersistPolicy>> _persistPoliciesByContext;
 
         protected TDbContext DbContext { get; }
         protected DbSet<TPersistPolicy> PersistPolicies => _persistPolicies ??= GetCasbinRuleDbSet(DbContext);
@@ -64,7 +64,7 @@ namespace Casbin.Persist.Adapter.EFCore
         {
             DbContext = context ?? throw new ArgumentNullException(nameof(context));
             _contextProvider = new SingleContextProvider<TKey>(context);
-            _persistPoliciesByContext = new Dictionary<DbContext, DbSet<TPersistPolicy>>();
+            _persistPoliciesByContext = new Dictionary<(DbContext context, string policyType), DbSet<TPersistPolicy>>();
         }
 
         /// <summary>
@@ -73,7 +73,7 @@ namespace Casbin.Persist.Adapter.EFCore
         public EFCoreAdapter(ICasbinDbContextProvider<TKey> contextProvider)
         {
             _contextProvider = contextProvider ?? throw new ArgumentNullException(nameof(contextProvider));
-            _persistPoliciesByContext = new Dictionary<DbContext, DbSet<TPersistPolicy>>();
+            _persistPoliciesByContext = new Dictionary<(DbContext context, string policyType), DbSet<TPersistPolicy>>();
             DbContext = null; // Multi-context mode - DbContext not applicable
         }
 
