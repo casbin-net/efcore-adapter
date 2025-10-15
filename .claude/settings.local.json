@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet list:*)",
+      "WebSearch",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(dotnet restore)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(dotnet --list-sdks)",
+      "Bash(Select-String -Pattern \"Failed|Error|Exception\" -Context 2,2)",
+      "Bash(Select-Object -First 50)",
+      "Bash(paste - - -)",
+      "Bash(paste -:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== Testing $fw ===\")",
+      "Bash(done)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
