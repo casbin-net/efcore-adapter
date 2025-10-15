@@ -316,7 +316,8 @@ namespace Casbin.Persist.Adapter.EFCore
                         var dbTransaction = (transaction as IInfrastructure<System.Data.Common.DbTransaction>)?.Instance;
                         if (dbTransaction != null)
                         {
-                            await context.Database.UseTransactionAsync(dbTransaction);
+                            // Use synchronous UseTransaction since we're just enlisting in an existing transaction
+                            context.Database.UseTransaction(dbTransaction);
                         }
                     }
 
