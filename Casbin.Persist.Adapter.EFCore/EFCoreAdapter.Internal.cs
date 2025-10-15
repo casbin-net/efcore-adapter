@@ -171,10 +171,11 @@ namespace Casbin.Persist.Adapter.EFCore
         /// </summary>
         private DbSet<TPersistPolicy> GetCasbinRuleDbSetForPolicyType(DbContext context, string policyType)
         {
-            if (!_persistPoliciesByContext.TryGetValue(context, out var dbSet))
+            var key = (context, policyType);
+            if (!_persistPoliciesByContext.TryGetValue(key, out var dbSet))
             {
                 dbSet = GetCasbinRuleDbSet(context, policyType);
-                _persistPoliciesByContext[context] = dbSet;
+                _persistPoliciesByContext[key] = dbSet;
             }
             return dbSet;
         }
