@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Threading.Tasks;
 using Casbin.Persist.Adapter.EFCore.Extensions;
 using Casbin.Persist.Adapter.EFCore.Entities;
@@ -19,6 +21,11 @@ namespace Casbin.Persist.Adapter.EFCore
         {
 
         }
+
+        public EFCoreAdapter(ICasbinDbContextProvider<TKey> contextProvider) : base(contextProvider)
+        {
+
+        }
     }
 
     public class EFCoreAdapter<TKey, TPersistPolicy> : EFCoreAdapter<TKey, TPersistPolicy, CasbinDbContext<TKey>>
@@ -31,37 +38,78 @@ namespace Casbin.Persist.Adapter.EFCore
         {
 
         }
+
+        public EFCoreAdapter(ICasbinDbContextProvider<TKey> contextProvider) : base(contextProvider)
+        {
+
+        }
     }
 
-    public partial class EFCoreAdapter<TKey, TPersistPolicy, TDbContext> : IAdapter, IFilteredAdapter 
+    public partial class EFCoreAdapter<TKey, TPersistPolicy, TDbContext> : IAdapter, IFilteredAdapter
         where TDbContext : DbContext
         where TPersistPolicy : class, IEFCorePersistPolicy<TKey>, new()
         where TKey : IEquatable<TKey>
     {
         private DbSet<TPersistPolicy> _persistPolicies;
+        private readonly ICasbinDbContextProvider<TKey> _contextProvider;
+        private readonly Dictionary<DbContext, DbSet<TPersistPolicy>> _persistPoliciesByContext;
+
         protected TDbContext DbContext { get; }
         protected DbSet<TPersistPolicy> PersistPolicies => _persistPolicies ??= GetCasbinRuleDbSet(DbContext);
 
+        /// <summary>
+        /// Creates adapter with single context (backward compatible)
+        /// </summary>
         public EFCoreAdapter(TDbContext context)
         {
             DbContext = context ?? throw new ArgumentNullException(nameof(context));
+            _contextProvider = new SingleContextProvider<TKey>(context);
+            _persistPoliciesByContext = new Dictionary<DbContext, DbSet<TPersistPolicy>>();
+        }
+
+        /// <summary>
+        /// Creates adapter with custom context provider for multi-context scenarios
+        /// </summary>
+        public EFCoreAdapter(ICasbinDbContextProvider<TKey> contextProvider)
+        {
+            _contextProvider = contextProvider ?? throw new ArgumentNullException(nameof(contextProvider));
+            _persistPoliciesByContext = new Dictionary<DbContext, DbSet<TPersistPolicy>>();
+            DbContext = null; // Multi-context mode - DbContext not applicable
         }
 
         #region Load policy
 
         public virtual void LoadPolicy(IPolicyStore store)
         {
-            var casbinRules = PersistPolicies.AsNoTracking();
-            casbinRules = OnLoadPolicy(store, casbinRules);
-            store.LoadPolicyFromPersistPolicy(casbinRules.ToList());
+            var allPolicies = new List<TPersistPolicy>();
+
+            // Load from each unique context
+            foreach (var context in _contextProvider.GetAllContexts().Distinct())
+            {
+                var dbSet = GetCasbinRuleDbSet(context, null);
+                var policies = dbSet.AsNoTracking().ToList();
+                allPolicies.AddRange(policies);
+            }
+
+            var filteredPolicies = OnLoadPolicy(store, allPolicies.AsQueryable());
+            store.LoadPolicyFromPersistPolicy(filteredPolicies.ToList());
             IsFiltered = false;
         }
 
         public virtual async Task LoadPolicyAsync(IPolicyStore store)
         {
-            var casbinRules = PersistPolicies.AsNoTracking();
-            casbinRules = OnLoadPolicy(store, casbinRules);
-            store.LoadPolicyFromPersistPolicy(await casbinRules.ToListAsync());
+            var allPolicies = new List<TPersistPolicy>();
+
+            // Load from each unique context
+            foreach (var context in _contextProvider.GetAllContexts().Distinct())
+            {
+                var dbSet = GetCasbinRuleDbSet(context, null);
+                var policies = await dbSet.AsNoTracking().ToListAsync();
+                allPolicies.AddRange(policies);
+            }
+
+            var filteredPolicies = OnLoadPolicy(store, allPolicies.AsQueryable());
+            store.LoadPolicyFromPersistPolicy(filteredPolicies.ToList());
             IsFiltered = false;
         }
 
@@ -79,13 +127,135 @@ namespace Casbin.Persist.Adapter.EFCore
                 return;
             }
 
-            var existRule = PersistPolicies.ToList();
-            PersistPolicies.RemoveRange(existRule);
-            DbContext.SaveChanges();
+            // Group policies by their target context
+            var policiesByContext = persistPolicies
+                .GroupBy(p => _contextProvider.GetContextForPolicyType(p.Type))
+                .ToList();
 
-            var saveRules = OnSavePolicy(store, persistPolicies);
-            PersistPolicies.AddRange(saveRules);
-            DbContext.SaveChanges();
+            var contexts = _contextProvider.GetAllContexts().Distinct().ToList();
+
+            // Check if we can use a shared transaction (all contexts use same connection)
+            if (contexts.Count == 1 || CanShareTransaction(contexts))
+            {
+                // Single context or shared connection - use single transaction
+                SavePolicyWithSharedTransaction(store, contexts, policiesByContext);
+            }
+            else
+            {
+                // Multiple separate databases - use individual transactions per context
+                SavePolicyWithIndividualTransactions(store, contexts, policiesByContext);
+            }
+        }
+
+        private void SavePolicyWithSharedTransaction(IPolicyStore store, List<DbContext> contexts,
+            List<IGrouping<DbContext, TPersistPolicy>> policiesByContext)
+        {
+            var primaryContext = contexts.First();
+            using var transaction = primaryContext.Database.BeginTransaction();
+
+            try
+            {
+                // Clear existing policies from all contexts
+                foreach (var context in contexts)
+                {
+                    if (context != primaryContext)
+                    {
+                        var dbTransaction = (transaction as IInfrastructure<System.Data.Common.DbTransaction>)?.Instance;
+                        if (dbTransaction != null)
+                        {
+                            context.Database.UseTransaction(dbTransaction);
+                        }
+                    }
+
+                    var dbSet = GetCasbinRuleDbSet(context, null);
+                    var existingRules = dbSet.ToList();
+                    dbSet.RemoveRange(existingRules);
+                    context.SaveChanges();
+                }
+
+                // Add new policies to respective contexts
+                foreach (var group in policiesByContext)
+                {
+                    var context = group.Key;
+                    var dbSet = GetCasbinRuleDbSet(context, null);
+                    var saveRules = OnSavePolicy(store, group);
+                    dbSet.AddRange(saveRules);
+                    context.SaveChanges();
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        private void SavePolicyWithIndividualTransactions(IPolicyStore store, List<DbContext> contexts,
+            List<IGrouping<DbContext, TPersistPolicy>> policiesByContext)
+        {
+            // Use separate transactions for each context (required for separate SQLite databases)
+            // Note: This is not atomic across contexts but is necessary for SQLite limitations
+            foreach (var context in contexts)
+            {
+                using var transaction = context.Database.BeginTransaction();
+                try
+                {
+                    // Clear existing policies from this context
+                    var dbSet = GetCasbinRuleDbSet(context, null);
+                    var existingRules = dbSet.ToList();
+                    dbSet.RemoveRange(existingRules);
+                    context.SaveChanges();
+
+                    // Add new policies to this context
+                    var policiesForContext = policiesByContext.FirstOrDefault(g => g.Key == context);
+                    if (policiesForContext != null)
+                    {
+                        var saveRules = OnSavePolicy(store, policiesForContext);
+                        dbSet.AddRange(saveRules);
+                        context.SaveChanges();
+                    }
+
+                    transaction.Commit();
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
+            }
+        }
+
+        private bool CanShareTransaction(List<DbContext> contexts)
+        {
+            // Check if all contexts share the same connection string
+            // For SQLite, separate database files cannot share transactions
+            if (contexts.Count <= 1) return true;
+
+            try
+            {
+                // Try to get connection string (available in EF Core 5.0+)
+                var firstConnection = contexts[0].Database.GetDbConnection();
+                var firstConnectionString = firstConnection?.ConnectionString;
+
+                if (string.IsNullOrEmpty(firstConnectionString))
+                {
+                    // If we can't determine connection strings, assume separate connections
+                    return false;
+                }
+
+                return contexts.All(c =>
+                {
+                    var connection = c.Database.GetDbConnection();
+                    return connection?.ConnectionString == firstConnectionString;
+                });
+            }
+            catch
+            {
+                // If we can't determine, assume separate connections for safety
+                return false;
+            }
         }
 
         public virtual async Task SavePolicyAsync(IPolicyStore store)
@@ -98,13 +268,104 @@ namespace Casbin.Persist.Adapter.EFCore
                 return;
             }
 
-            var existRule = PersistPolicies.ToList();
-            PersistPolicies.RemoveRange(existRule);
-            await DbContext.SaveChangesAsync();
+            // Group policies by their target context
+            var policiesByContext = persistPolicies
+                .GroupBy(p => _contextProvider.GetContextForPolicyType(p.Type))
+                .ToList();
 
-            var saveRules = OnSavePolicy(store, persistPolicies);
-            await PersistPolicies.AddRangeAsync(saveRules);
-            await DbContext.SaveChangesAsync();
+            var contexts = _contextProvider.GetAllContexts().Distinct().ToList();
+
+            // Check if we can use a shared transaction (all contexts use same connection)
+            if (contexts.Count == 1 || CanShareTransaction(contexts))
+            {
+                // Single context or shared connection - use single transaction
+                await SavePolicyWithSharedTransactionAsync(store, contexts, policiesByContext);
+            }
+            else
+            {
+                // Multiple separate databases - use individual transactions per context
+                await SavePolicyWithIndividualTransactionsAsync(store, contexts, policiesByContext);
+            }
+        }
+
+        private async Task SavePolicyWithSharedTransactionAsync(IPolicyStore store, List<DbContext> contexts,
+            List<IGrouping<DbContext, TPersistPolicy>> policiesByContext)
+        {
+            var primaryContext = contexts.First();
+            await using var transaction = await primaryContext.Database.BeginTransactionAsync();
+
+            try
+            {
+                // Clear existing policies from all contexts
+                foreach (var context in contexts)
+                {
+                    if (context != primaryContext)
+                    {
+                        var dbTransaction = (transaction as IInfrastructure<System.Data.Common.DbTransaction>)?.Instance;
+                        if (dbTransaction != null)
+                        {
+                            await context.Database.UseTransactionAsync(dbTransaction);
+                        }
+                    }
+
+                    var dbSet = GetCasbinRuleDbSet(context, null);
+                    var existingRules = await dbSet.ToListAsync();
+                    dbSet.RemoveRange(existingRules);
+                    await context.SaveChangesAsync();
+                }
+
+                // Add new policies to respective contexts
+                foreach (var group in policiesByContext)
+                {
+                    var context = group.Key;
+                    var dbSet = GetCasbinRuleDbSet(context, null);
+                    var saveRules = OnSavePolicy(store, group);
+                    await dbSet.AddRangeAsync(saveRules);
+                    await context.SaveChangesAsync();
+                }
+
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        private async Task SavePolicyWithIndividualTransactionsAsync(IPolicyStore store, List<DbContext> contexts,
+            List<IGrouping<DbContext, TPersistPolicy>> policiesByContext)
+        {
+            // Use separate transactions for each context (required for separate SQLite databases)
+            // Note: This is not atomic across contexts but is necessary for SQLite limitations
+            foreach (var context in contexts)
+            {
+                await using var transaction = await context.Database.BeginTransactionAsync();
+                try
+                {
+                    // Clear existing policies from this context
+                    var dbSet = GetCasbinRuleDbSet(context, null);
+                    var existingRules = await dbSet.ToListAsync();
+                    dbSet.RemoveRange(existingRules);
+                    await context.SaveChangesAsync();
+
+                    // Add new policies to this context
+                    var policiesForContext = policiesByContext.FirstOrDefault(g => g.Key == context);
+                    if (policiesForContext != null)
+                    {
+                        var saveRules = OnSavePolicy(store, policiesForContext);
+                        await dbSet.AddRangeAsync(saveRules);
+                        await context.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            }
         }
 
         #endregion
@@ -118,8 +379,10 @@ namespace Casbin.Persist.Adapter.EFCore
                 return;
             }
 
+            var context = GetContextForPolicyType(policyType);
+            var dbSet = GetCasbinRuleDbSetForPolicyType(context, policyType);
             var filter = new PolicyFilter(policyType, 0, values);
-            var persistPolicies = filter.Apply(PersistPolicies);
+            var persistPolicies = filter.Apply(dbSet);
 
             if (persistPolicies.Any())
             {
@@ -127,7 +390,7 @@ namespace Casbin.Persist.Adapter.EFCore
             }
 
             InternalAddPolicy(section, policyType, values);
-            DbContext.SaveChanges();
+            context.SaveChanges();
         }
 
         public virtual async Task AddPolicyAsync(string section, string policyType, IPolicyValues values)
@@ -137,8 +400,10 @@ namespace Casbin.Persist.Adapter.EFCore
                 return;
             }
 
+            var context = GetContextForPolicyType(policyType);
+            var dbSet = GetCasbinRuleDbSetForPolicyType(context, policyType);
             var filter = new PolicyFilter(policyType, 0, values);
-            var persistPolicies = filter.Apply(PersistPolicies);
+            var persistPolicies = filter.Apply(dbSet);
 
             if (persistPolicies.Any())
             {
@@ -146,7 +411,7 @@ namespace Casbin.Persist.Adapter.EFCore
             }
 
             await InternalAddPolicyAsync(section, policyType, values);
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
 
         public virtual void AddPolicies(string section, string policyType,  IReadOnlyList<IPolicyValues> valuesList)
@@ -155,8 +420,9 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             InternalAddPolicies(section, policyType, valuesList);
-            DbContext.SaveChanges();
+            context.SaveChanges();
         }
 
         public virtual async Task AddPoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
@@ -165,8 +431,9 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             await InternalAddPoliciesAsync(section, policyType, valuesList);
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
 
         #endregion
@@ -179,8 +446,9 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             InternalRemovePolicy(section, policyType, values);
-            DbContext.SaveChanges();
+            context.SaveChanges();
         }
 
         public virtual async Task RemovePolicyAsync(string section, string policyType, IPolicyValues values)
@@ -189,8 +457,9 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             InternalRemovePolicy(section, policyType, values);
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
 
         public virtual void RemoveFilteredPolicy(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
@@ -199,8 +468,9 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             InternalRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues);
-            DbContext.SaveChanges();
+            context.SaveChanges();
         }
 
         public virtual async Task RemoveFilteredPolicyAsync(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
@@ -209,8 +479,9 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             InternalRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues);
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
 
 
@@ -220,8 +491,9 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             InternalRemovePolicies(section, policyType, valuesList);
-            DbContext.SaveChanges();
+            context.SaveChanges();
         }
 
         public virtual async Task RemovePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
@@ -230,23 +502,25 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
+            var context = GetContextForPolicyType(policyType);
             InternalRemovePolicies(section, policyType, valuesList);
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
 
         #endregion
 
         #region Update policy
-        
+
         public void UpdatePolicy(string section, string policyType, IPolicyValues oldValues, IPolicyValues newValues)
         {
             if (newValues.Count is 0)
             {
                 return;
             }
-            using var transaction = DbContext.Database.BeginTransaction();
+            var context = GetContextForPolicyType(policyType);
+            using var transaction = context.Database.BeginTransaction();
             InternalUpdatePolicy(section, policyType, oldValues, newValues);
-            DbContext.SaveChanges();
+            context.SaveChanges();
             transaction.Commit();
         }
 
@@ -256,9 +530,10 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
-            await using var transaction = await DbContext.Database.BeginTransactionAsync();
+            var context = GetContextForPolicyType(policyType);
+            await using var transaction = await context.Database.BeginTransactionAsync();
             await InternalUpdatePolicyAsync(section, policyType, oldValues, newValues);
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
             await transaction.CommitAsync();
         }
 
@@ -268,9 +543,10 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
-            using var transaction = DbContext.Database.BeginTransaction();
+            var context = GetContextForPolicyType(policyType);
+            using var transaction = context.Database.BeginTransaction();
             InternalUpdatePolicies(section, policyType, oldValuesList, newValuesList);
-            DbContext.SaveChanges();
+            context.SaveChanges();
             transaction.Commit();
         }
 
@@ -280,9 +556,10 @@ namespace Casbin.Persist.Adapter.EFCore
             {
                 return;
             }
-            await using var transaction = await DbContext.Database.BeginTransactionAsync();
+            var context = GetContextForPolicyType(policyType);
+            await using var transaction = await context.Database.BeginTransactionAsync();
             await InternalUpdatePoliciesAsync(section, policyType, oldValuesList, newValuesList);
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
             await transaction.CommitAsync();
         }
 
@@ -291,22 +568,40 @@ namespace Casbin.Persist.Adapter.EFCore
         #region IFilteredAdapter
 
         public bool IsFiltered { get; private set; }
-        
+
         public void LoadFilteredPolicy(IPolicyStore store, IPolicyFilter filter)
         {
-            var persistPolicies = PersistPolicies.AsNoTracking();
-            persistPolicies = filter.Apply(persistPolicies);
-            persistPolicies = OnLoadPolicy(store, persistPolicies);
-            store.LoadPolicyFromPersistPolicy(persistPolicies.ToList());
+            var allPolicies = new List<TPersistPolicy>();
+
+            // Load from each unique context
+            foreach (var context in _contextProvider.GetAllContexts().Distinct())
+            {
+                var dbSet = GetCasbinRuleDbSet(context, null);
+                var policies = dbSet.AsNoTracking();
+                var filtered = filter.Apply(policies);
+                allPolicies.AddRange(filtered.ToList());
+            }
+
+            var finalPolicies = OnLoadPolicy(store, allPolicies.AsQueryable());
+            store.LoadPolicyFromPersistPolicy(finalPolicies.ToList());
             IsFiltered = true;
         }
 
         public async Task LoadFilteredPolicyAsync(IPolicyStore store, IPolicyFilter filter)
         {
-            var persistPolicies = PersistPolicies.AsNoTracking();
-            persistPolicies = filter.Apply(persistPolicies);
-            persistPolicies = OnLoadPolicy(store, persistPolicies);
-            store.LoadPolicyFromPersistPolicy(await persistPolicies.ToListAsync());
+            var allPolicies = new List<TPersistPolicy>();
+
+            // Load from each unique context
+            foreach (var context in _contextProvider.GetAllContexts().Distinct())
+            {
+                var dbSet = GetCasbinRuleDbSet(context, null);
+                var policies = dbSet.AsNoTracking();
+                var filtered = filter.Apply(policies);
+                allPolicies.AddRange(await filtered.ToListAsync());
+            }
+
+            var finalPolicies = OnLoadPolicy(store, allPolicies.AsQueryable());
+            store.LoadPolicyFromPersistPolicy(finalPolicies.ToList());
             IsFiltered = true;
         }
 

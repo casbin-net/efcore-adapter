@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace Casbin.Persist.Adapter.EFCore.UnitTest.Extensions
 {
@@ -6,8 +7,16 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Extensions
     {
         internal static void Clear<TKey>(this CasbinDbContext<TKey> dbContext) where TKey : IEquatable<TKey>
         {
-            dbContext.RemoveRange(dbContext.Policies);
-            dbContext.SaveChanges();
+            // Ensure database and tables exist before attempting to clear
+            dbContext.Database.EnsureCreated();
+
+            // Only remove and save if there are policies to clear
+            var policies = dbContext.Policies.ToList();
+            if (policies.Count > 0)
+            {
+                dbContext.RemoveRange(policies);
+                dbContext.SaveChanges();
+            }
         }
     }
 }
