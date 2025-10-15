@@ -449,5 +449,78 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
             // 'p' and 'g' types should route to different contexts
             Assert.NotSame(pContext, gContext);
         }
+
+        [Fact]
+        public void TestDbSetCachingByPolicyType()
+        {
+            // This test verifies that the DbSet cache uses (context, policyType) as the composite key
+            // rather than just context. This prevents the bug where different policy types would
+            // incorrectly share the same cached DbSet.
+
+            // Arrange
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("DbSetCaching");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("DbSetCaching");
+
+            policyContext.Clear();
+            groupingContext.Clear();
+
+            // Create a custom adapter that tracks GetCasbinRuleDbSet calls
+            var callTracker = new Dictionary<string, int>();
+            var adapter = new DbSetCachingTestAdapter(provider, callTracker);
+            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
+
+            // Act - Add policies of different types
+            enforcer.AddPolicy("alice", "data1", "read");      // Type 'p' - first call should invoke GetCasbinRuleDbSet
+            enforcer.AddPolicy("bob", "data2", "write");       // Type 'p' - should use cached DbSet
+            enforcer.AddGroupingPolicy("alice", "admin");      // Type 'g' - different type, should invoke GetCasbinRuleDbSet
+            enforcer.AddGroupingPolicy("bob", "user");         // Type 'g' - should use cached DbSet
+
+            // Assert - Verify GetCasbinRuleDbSet was called once per unique (context, policyType) combination
+            // If the cache key was only 'context', it would be called once and return wrong DbSet for 'g'
+            Assert.Equal(1, callTracker["p"]);  // Called once for 'p', then cached
+            Assert.Equal(1, callTracker["g"]);  // Called once for 'g', then cached
+
+            // Verify data went to correct contexts
+            Assert.Equal(2, policyContext.Policies.Count());
+            Assert.Equal(2, groupingContext.Policies.Count());
+
+            // Verify policy types are correct
+            Assert.All(policyContext.Policies, p => Assert.Equal("p", p.Type));
+            Assert.All(groupingContext.Policies, g => Assert.Equal("g", g.Type));
+        }
+    }
+
+    /// <summary>
+    /// Test adapter that tracks how many times GetCasbinRuleDbSet is called per policy type.
+    /// This is used to verify the DbSet caching behavior.
+    /// </summary>
+    internal class DbSetCachingTestAdapter : EFCoreAdapter<int>
+    {
+        private readonly Dictionary<string, int> _callTracker;
+
+        public DbSetCachingTestAdapter(
+            ICasbinDbContextProvider<int> contextProvider,
+            Dictionary<string, int> callTracker)
+            : base(contextProvider)
+        {
+            _callTracker = callTracker;
+        }
+
+        protected override DbSet<EFCorePersistPolicy<int>> GetCasbinRuleDbSet(DbContext dbContext, string policyType)
+        {
+            // Track that this method was called for this policy type
+            // Only track non-null policy types (null is used for general operations)
+            if (policyType != null)
+            {
+                if (!_callTracker.ContainsKey(policyType))
+                {
+                    _callTracker[policyType] = 0;
+                }
+                _callTracker[policyType]++;
+            }
+
+            // Call base implementation to get the actual DbSet
+            return base.GetCasbinRuleDbSet(dbContext, policyType);
+        }
     }
 }
