@@ -16,6 +16,7 @@ env:
   RUN_ID: ${{ github.run_id }}
   RUN_NUMBER: ${{ github.run_number }}
   BUILD_RUN_NUMBER: build.${{ github.run_number }}
+  AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
 
 jobs:
   build-and-publish-private:
@@ -97,10 +98,33 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Configure Azure DevOps NuGet source
+      run: |
+        # Add Azure DevOps feed as a NuGet source
+        dotnet nuget add source "https://pkgs.dev.azure.com/rosbergas/_packaging/Rosberg/nuget/v3/index.json" `
+          --name "azure-rosberg" `
+          --username "az" `
+          --password $env:AZURE_DEVOPS_PAT `
+          --store-password-in-clear-text;
+      env:
+        AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+
+    - name: Push packages to Azure DevOps
+      run: |
+        dotnet nuget push .\packages\*.nupkg `
+          --source "azure-rosberg" `
+          --api-key az `
+          --skip-duplicate;
+      env:
+        AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+
     - name: Summary
       run: |
         echo "### Verji Private NuGet Build Complete :rocket:" >> $env:GITHUB_STEP_SUMMARY;
         echo "" >> $env:GITHUB_STEP_SUMMARY;
         echo "**Branch:** $env:REF" >> $env:GITHUB_STEP_SUMMARY;
         echo "**Commit:** $env:SHA" >> $env:GITHUB_STEP_SUMMARY;
-        echo "**Packages uploaded to GitHub Packages (private feed)**" >> $env:GITHUB_STEP_SUMMARY;
+        echo "" >> $env:GITHUB_STEP_SUMMARY;
+        echo "**Packages uploaded to:**" >> $env:GITHUB_STEP_SUMMARY;
+        echo "- GitHub Packages (private feed)" >> $env:GITHUB_STEP_SUMMARY;
+        echo "- Azure DevOps Rosberg feed" >> $env:GITHUB_STEP_SUMMARY;
