@@ -19,7 +19,9 @@
       "Bash(for:*)",
       "Bash(do echo \"=== Testing $fw ===\")",
       "Bash(done)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Add Azure DevOps feed to Verji private workflow\n\nUpdate the Verji private NuGet workflow to push packages to both:\n- GitHub Packages (private feed)\n- Azure DevOps Rosberg feed\n\nRequires AZURE_DEVOPS_PAT secret to be configured in GitHub repository settings.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []

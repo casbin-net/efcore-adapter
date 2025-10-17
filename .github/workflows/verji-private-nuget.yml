@@ -112,7 +112,7 @@ jobs:
     - name: Push packages to Azure DevOps
       run: |
         dotnet nuget push .\packages\*.nupkg `
-          --source "Rosberg" `
+          --source "azure-rosberg" `
           --api-key az `
           --skip-duplicate;
       env:
