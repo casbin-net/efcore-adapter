@@ -1,0 +1,106 @@
+name: Verji Private NuGet Build
+
+# This workflow is EXPERIMENTAL and PRIVATE to Verji
+# DO NOT merge to main/master or PR branches
+
+on:
+  push:
+    branches:
+      - 'verji/**'
+      - 'taj/**'
+  workflow_dispatch:
+
+env:
+  SHA: ${{ github.sha }}
+  REF: ${{ github.ref }}
+  RUN_ID: ${{ github.run_id }}
+  RUN_NUMBER: ${{ github.run_number }}
+  BUILD_RUN_NUMBER: build.${{ github.run_number }}
+
+jobs:
+  build-and-publish-private:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: |
+            3.1.x
+            5.0.x
+            6.0.x
+            7.0.x
+            8.0.x
+            9.0.x
+        include-prerelease: true
+
+    - name: Check .NET info
+      run: dotnet --info
+
+    - name: Install dependencies
+      run: dotnet restore
+
+    - name: Build solution
+      run: dotnet build -c Release --no-restore
+
+    - name: Test solution
+      run: dotnet test -c Release --no-build --no-restore --verbosity normal
+
+    - name: Pack packages
+      run: |
+        $BranchName = git rev-parse --abbrev-ref HEAD;
+        echo "Branch name: $BranchName";
+        $SafeBranchName = $BranchName -replace '[^a-zA-Z0-9-]', '-';
+        echo "Safe branch name: $SafeBranchName";
+        $ShortSha = $env:SHA.SubString(0, 7);
+        echo "Short SHA: $ShortSha";
+        $Timestamp = Get-Date -Format "yyyyMMddHHmmss";
+        echo "Timestamp: $Timestamp";
+        $PackageVersion = "0.0.1-verji-${SafeBranchName}-${ShortSha}-${Timestamp}";
+        echo "Package version: ${PackageVersion}";
+        dotnet pack -c Release -o packages /p:PackageVersion=$PackageVersion;
+
+    - name: Upload packages artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: "verji-private-packages"
+        path: './packages'
+
+    - name: Configure GitHub NuGet source
+      run: |
+        # Get the repository owner and name from GITHUB_REPOSITORY
+        $repo = $env:GITHUB_REPOSITORY;
+        echo "Repository: $repo";
+        $owner = $repo.Split('/')[0];
+        echo "Owner: $owner";
+
+        # Add GitHub Packages as a NuGet source
+        dotnet nuget add source "https://nuget.pkg.github.com/${owner}/index.json" `
+          --name "github-verji" `
+          --username $owner `
+          --password $env:GITHUB_TOKEN `
+          --store-password-in-clear-text;
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push packages to GitHub Packages
+      run: |
+        dotnet nuget push .\packages\*.nupkg `
+          --source "github-verji" `
+          --api-key $env:GITHUB_TOKEN `
+          --skip-duplicate;
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Summary
+      run: |
+        echo "### Verji Private NuGet Build Complete :rocket:" >> $env:GITHUB_STEP_SUMMARY;
+        echo "" >> $env:GITHUB_STEP_SUMMARY;
+        echo "**Branch:** $env:REF" >> $env:GITHUB_STEP_SUMMARY;
+        echo "**Commit:** $env:SHA" >> $env:GITHUB_STEP_SUMMARY;
+        echo "**Packages uploaded to GitHub Packages (private feed)**" >> $env:GITHUB_STEP_SUMMARY;
