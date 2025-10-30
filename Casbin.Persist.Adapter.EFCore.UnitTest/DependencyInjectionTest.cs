@@ -68,5 +68,24 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
             var model = _modelProvideFixture.GetNewRbacModel();
             adapter.LoadPolicy(model); // Should not throw
         }
+
+        [Fact]
+        public void ShouldResolveAdapterRegisteredWithExtensionMethod()
+        {
+            // The adapter registered via AddEFCoreAdapter extension should be resolvable
+            var adapter = _testHostFixture.Services.GetService<IAdapter>();
+            Assert.NotNull(adapter);
+            
+            // Create scope to ensure database exists
+            using (var scope = _testHostFixture.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<CasbinDbContext<int>>();
+                dbContext.Database.EnsureCreated();
+            }
+            
+            // Should be able to use the adapter
+            var model = _modelProvideFixture.GetNewRbacModel();
+            adapter.LoadPolicy(model); // Should not throw
+        }
     }
 }

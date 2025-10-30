@@ -68,6 +68,51 @@ namespace ConsoleAppExample
 }
 ```
 
+## Using with Dependency Injection
+
+When using the adapter with dependency injection (e.g., in ASP.NET Core), you should use the `IServiceProvider` constructor or the extension method to avoid issues with disposed DbContext instances.
+
+### Recommended Approach (Using Extension Method)
+
+```csharp
+using Casbin.Persist.Adapter.EFCore;
+using Casbin.Persist.Adapter.EFCore.Extensions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+// Register services
+services.AddDbContext<CasbinDbContext<int>>(options =>
+    options.UseSqlServer(connectionString));
+
+// Register the adapter using the extension method
+services.AddEFCoreAdapter<int>();
+
+// The adapter will resolve the DbContext from the service provider on each operation,
+// preventing issues with disposed contexts when used with long-lived services.
+```
+
+### Alternative Approach (Using IServiceProvider Constructor)
+
+```csharp
+// In your startup configuration
+services.AddDbContext<CasbinDbContext<int>>(options =>
+    options.UseSqlServer(connectionString));
+
+services.AddCasbinAuthorization(options =>
+{
+    options.DefaultModelPath = "model.conf";
+    
+    // Use the IServiceProvider constructor
+    options.DefaultEnforcerFactory = (sp, model) =>
+        new Enforcer(model, new EFCoreAdapter<int>(sp));
+});
+```
+
+This approach resolves the DbContext from the service provider on each database operation, ensuring that:
+- The adapter works correctly with scoped DbContext instances
+- No `ObjectDisposedException` is thrown when the adapter outlives the scope that created it
+- The adapter can be used in long-lived services like singletons
+
 ## Getting Help
 
 - [Casbin.NET](https://github.com/casbin/Casbin.NET)
