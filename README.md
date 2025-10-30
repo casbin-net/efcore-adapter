@@ -95,6 +95,15 @@ enforcer.AddGroupingPolicy("alice", "admin");      // → groupingContext
 enforcer.SavePolicy();                              // Atomic across both
 ```
 
+> **⚠️ IMPORTANT - Transaction Integrity:**
+>
+> For atomic operations across contexts, **YOU must ensure all contexts share the same connection string**. The adapter detects connection compatibility and automatically uses `UseTransaction()` to coordinate shared transactions, but **ensuring identical connection strings is YOUR responsibility**. Use a context factory pattern to guarantee consistency.
+>
+> - ✅ **Atomic:** SQL Server, PostgreSQL, MySQL, SQLite (same file) - when using identical connection strings
+> - ❌ **NOT Atomic:** SQLite separate files, different databases, different connection strings
+>
+> See detailed requirements in the [Transaction Integrity Requirements](MULTI_CONTEXT_USAGE_GUIDE.md#-transaction-integrity-requirements) section.
+
 ### Documentation
 
 - **[Multi-Context Usage Guide](MULTI_CONTEXT_USAGE_GUIDE.md)** - Complete step-by-step guide with examples

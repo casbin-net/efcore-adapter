@@ -307,6 +307,174 @@ enforcer.LoadFilteredPolicy(new Filter
 });
 ```
 
+## 🔒 Transaction Integrity Requirements
+
+**CRITICAL:** For atomic operations across multiple contexts, YOU (the application developer) must ensure all contexts can share a physical database connection.
+
+### Your Responsibility as the Consumer
+
+The multi-context adapter provides **detection and coordination**, but **YOU are responsible** for:
+
+1. **Providing contexts with identical connection strings**
+2. **Using a context factory pattern** to ensure consistency
+3. **Understanding database-specific limitations** (e.g., SQLite separate files)
+4. **Accepting the trade-offs** when using incompatible configurations
+
+### How Transaction Sharing Works
+
+The adapter automatically coordinates transactions when possible:
+
+```csharp
+// What YOU do:
+string connectionString = "Server=localhost;Database=CasbinDB;...";
+var ctx1 = new CasbinDbContext<int>(BuildOptions(connectionString), schemaName: "policies");
+var ctx2 = new CasbinDbContext<int>(BuildOptions(connectionString), schemaName: "groupings");
+var provider = new PolicyTypeContextProvider(ctx1, ctx2);
+var adapter = new EFCoreAdapter<int>(provider);
+
+// What the ADAPTER does internally when you call SavePolicy():
+// 1. Detects both contexts have same connection string (CanShareTransaction())
+// 2. Starts transaction: var tx = ctx1.Database.BeginTransaction()
+// 3. Enlists ctx2: ctx2.Database.UseTransaction(tx.GetDbTransaction())
+// 4. Saves to both contexts
+// 5. Commits atomically (all or nothing)
+```
+
+**Key Point:** You DON'T manually call `UseTransaction()` - the adapter does it for you. You ONLY need to ensure the connection strings match.
+
+### ✅ Correct Patterns
+
+#### Pattern 1: Shared Connection String Variable
+
+```csharp
+// CORRECT: Define once, use everywhere
+string connectionString = "Server=localhost;Database=CasbinDB;Trusted_Connection=True;";
+
+var policyContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer(connectionString)  // Same string
+        .Options,
+    schemaName: "policies");
+
+var groupingContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer(connectionString)  // Same string = atomicity possible
+        .Options,
+    schemaName: "groupings");
+```
+
+#### Pattern 2: Context Factory (Recommended)
+
+```csharp
+public class CasbinContextFactory
+{
+    private readonly string _connectionString;
+
+    public CasbinContextFactory(IConfiguration configuration)
+    {
+        _connectionString = configuration.GetConnectionString("Casbin");
+    }
+
+    public CasbinDbContext<int> CreateContext(string schemaName)
+    {
+        var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
+            .UseSqlServer(_connectionString)  // Guaranteed same connection string
+            .Options;
+        return new CasbinDbContext<int>(options, schemaName: schemaName);
+    }
+}
+
+// Usage
+var factory = new CasbinContextFactory(configuration);
+var policyContext = factory.CreateContext("policies");
+var groupingContext = factory.CreateContext("groupings");
+// Both contexts guaranteed to have same connection string
+```
+
+### ❌ Common Mistakes
+
+#### Mistake 1: Hard-Coding Different Connection Strings
+
+```csharp
+// WRONG: Different connection strings = NO shared transaction
+var policyContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer("Server=localhost;Database=CasbinDB;...")
+        .Options);
+
+var groupingContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer("Server=localhost;Database=CasbinDB;...")  // Looks same but different string instance
+        .Options);
+
+// Problem: Even though they LOOK the same, if you typed them separately,
+// they might have subtle differences (whitespace, parameter order, etc.)
+// ALWAYS use a single connection string variable!
+```
+
+#### Mistake 2: Using Separate SQLite Files for Production
+
+```csharp
+// WRONG for production: SQLite cannot share transactions across files
+var policyContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlite("Data Source=casbin_policy.db")
+        .Options);
+
+var groupingContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlite("Data Source=casbin_grouping.db")  // Different file
+        .Options);
+
+// Result: Individual transactions (NOT atomic)
+// Acceptable for: Testing, development
+// NOT acceptable for: Production requiring ACID guarantees
+```
+
+### What the Adapter Does vs. What You Do
+
+| Task | Your Responsibility | Adapter Responsibility |
+|------|-------------------|----------------------|
+| **Provide same connection string** | ✅ YES - Define once, reuse | ❌ NO |
+| **Implement context factory** | ✅ YES (recommended) | ❌ NO |
+| **Understand database limitations** | ✅ YES (SQLite files, etc.) | ❌ NO |
+| **Call UseTransaction()** | ❌ NO | ✅ YES (internal) |
+| **Detect connection compatibility** | ❌ NO | ✅ YES (CanShareTransaction) |
+| **Coordinate commit/rollback** | ❌ NO | ✅ YES (transaction handling) |
+| **Choose to accept non-atomic behavior** | ✅ YES (your decision) | ❌ NO |
+
+### Database-Specific Requirements
+
+| Database | Same Connection String Required? | Supports Transaction Sharing? | Notes |
+|----------|--------------------------------|------------------------------|-------|
+| **SQL Server** | ✅ YES | ✅ YES | UseTransaction works across contexts with same database |
+| **PostgreSQL** | ✅ YES | ✅ YES | UseTransaction works across contexts with same database |
+| **MySQL** | ✅ YES | ✅ YES | UseTransaction works across contexts with same database |
+| **SQLite (same file)** | ✅ YES | ✅ YES | Must point to same physical file path |
+| **SQLite (different files)** | N/A | ❌ NO | **Cannot share transactions** - uses individual tx per context |
+
+### Detection vs. Enforcement
+
+**Important:** The adapter DETECTS but does NOT ENFORCE transaction integrity requirements:
+
+- ✅ If connection strings match: Uses shared transaction (atomic)
+- ⚠️ If connection strings differ: Uses individual transactions (NOT atomic) - **no error thrown**
+- ⚠️ The adapter gracefully degrades - YOU must understand the implications
+
+### When Non-Atomic Behavior is Acceptable
+
+Individual transactions (non-atomic) may be acceptable for:
+
+- **Testing/Development**: Using separate SQLite files for test isolation
+- **Read-Heavy Workloads**: When eventual consistency is acceptable
+- **Non-Critical Data**: When partial failures can be handled by application logic
+
+Individual transactions are **NOT acceptable** for:
+
+- **Production ACID Requirements**: Financial transactions, authorization data
+- **Compliance/Audit**: Where transaction atomicity is legally required
+- **Multi-Tenant SaaS**: Where data integrity across tenants is critical
+
 ## Transaction Limitations
 
 ### ✅ Same Connection = Atomic Transactions
@@ -317,13 +485,22 @@ When both contexts connect to the **same database** (same connection string):
 - Works with: SQL Server, PostgreSQL, MySQL (same database), SQLite (same file)
 
 ```csharp
+// RECOMMENDED: Use a single connection string variable
+string connectionString = "Server=localhost;Database=CasbinDB;...";
+
 // Both contexts use same database - ATOMIC
 var policyOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-    .UseSqlServer("Server=localhost;Database=CasbinDB;...")
+    .UseSqlServer(connectionString)  // Using shared connection string variable
     .Options;
 var groupingOptions = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-    .UseSqlServer("Server=localhost;Database=CasbinDB;...") // Same connection string
+    .UseSqlServer(connectionString)  // Same connection string = atomicity guaranteed
     .Options;
+
+// How atomicity works:
+// 1. You provide contexts with matching connection strings
+// 2. Adapter detects match via CanShareTransaction()
+// 3. Adapter uses UseTransaction() internally to enlist both contexts
+// 4. Database coordinates single transaction across both connection objects
 ```
 
 ### ⚠️ Separate Connections = Individual Transactions
