@@ -14,7 +14,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
                 {
                     options.UseSqlite("Data Source=CasbinHostTest.db");
                 })
-                .AddScoped<IAdapter, EFCoreAdapter<int>>()
+                .AddScoped<IAdapter>(sp => new EFCoreAdapter<int>(sp.GetRequiredService<CasbinDbContext<int>>()))
                 .BuildServiceProvider();
             Server = new TestServer(Services);
         }

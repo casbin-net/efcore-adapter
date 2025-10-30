@@ -19,6 +19,11 @@ namespace Casbin.Persist.Adapter.EFCore
         {
 
         }
+
+        public EFCoreAdapter(IServiceProvider serviceProvider) : base(serviceProvider)
+        {
+
+        }
     }
 
     public class EFCoreAdapter<TKey, TPersistPolicy> : EFCoreAdapter<TKey, TPersistPolicy, CasbinDbContext<TKey>>
@@ -31,6 +36,11 @@ namespace Casbin.Persist.Adapter.EFCore
         {
 
         }
+
+        public EFCoreAdapter(IServiceProvider serviceProvider) : base(serviceProvider)
+        {
+
+        }
     }
 
     public partial class EFCoreAdapter<TKey, TPersistPolicy, TDbContext> : IAdapter, IFilteredAdapter 
@@ -39,12 +49,32 @@ namespace Casbin.Persist.Adapter.EFCore
         where TKey : IEquatable<TKey>
     {
         private DbSet<TPersistPolicy> _persistPolicies;
-        protected TDbContext DbContext { get; }
-        protected DbSet<TPersistPolicy> PersistPolicies => _persistPolicies ??= GetCasbinRuleDbSet(DbContext);
+        private readonly IServiceProvider _serviceProvider;
+        private readonly bool _useServiceProvider;
+        
+        protected TDbContext DbContext { get; private set; }
+        protected DbSet<TPersistPolicy> PersistPolicies => _persistPolicies ??= GetCasbinRuleDbSet(GetOrResolveDbContext());
 
         public EFCoreAdapter(TDbContext context)
         {
             DbContext = context ?? throw new ArgumentNullException(nameof(context));
+            _useServiceProvider = false;
+        }
+
+        public EFCoreAdapter(IServiceProvider serviceProvider)
+        {
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _useServiceProvider = true;
+        }
+
+        private TDbContext GetOrResolveDbContext()
+        {
+            if (_useServiceProvider)
+            {
+                return _serviceProvider.GetService(typeof(TDbContext)) as TDbContext
+                    ?? throw new InvalidOperationException($"Unable to resolve service for type '{typeof(TDbContext)}' from IServiceProvider.");
+            }
+            return DbContext;
         }
 
         #region Load policy
@@ -71,6 +101,7 @@ namespace Casbin.Persist.Adapter.EFCore
 
         public virtual void SavePolicy(IPolicyStore store)
         {
+            var dbContext = GetOrResolveDbContext();
             var persistPolicies = new List<TPersistPolicy>();
             persistPolicies.ReadPolicyFromCasbinModel(store);
 
@@ -81,15 +112,16 @@ namespace Casbin.Persist.Adapter.EFCore
 
             var existRule = PersistPolicies.ToList();
             PersistPolicies.RemoveRange(existRule);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
 
             var saveRules = OnSavePolicy(store, persistPolicies);
             PersistPolicies.AddRange(saveRules);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
         }
 
         public virtual async Task SavePolicyAsync(IPolicyStore store)
         {
+            var dbContext = GetOrResolveDbContext();
             var persistPolicies = new List<TPersistPolicy>();
             persistPolicies.ReadPolicyFromCasbinModel(store);
 
@@ -100,11 +132,11 @@ namespace Casbin.Persist.Adapter.EFCore
 
             var existRule = PersistPolicies.ToList();
             PersistPolicies.RemoveRange(existRule);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
 
             var saveRules = OnSavePolicy(store, persistPolicies);
             await PersistPolicies.AddRangeAsync(saveRules);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
 
         #endregion
@@ -113,6 +145,7 @@ namespace Casbin.Persist.Adapter.EFCore
 
         public virtual void AddPolicy(string section, string policyType, IPolicyValues values)
         {
+            var dbContext = GetOrResolveDbContext();
             if (values.Count is 0)
             {
                 return;
@@ -127,11 +160,12 @@ namespace Casbin.Persist.Adapter.EFCore
             }
 
             InternalAddPolicy(section, policyType, values);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
         }
 
         public virtual async Task AddPolicyAsync(string section, string policyType, IPolicyValues values)
         {
+            var dbContext = GetOrResolveDbContext();
             if (values.Count is 0)
             {
                 return;
@@ -146,27 +180,29 @@ namespace Casbin.Persist.Adapter.EFCore
             }
 
             await InternalAddPolicyAsync(section, policyType, values);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
 
         public virtual void AddPolicies(string section, string policyType,  IReadOnlyList<IPolicyValues> valuesList)
         {
+            var dbContext = GetOrResolveDbContext();
             if (valuesList.Count is 0)
             {
                 return;
             }
             InternalAddPolicies(section, policyType, valuesList);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
         }
 
         public virtual async Task AddPoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
         {
+            var dbContext = GetOrResolveDbContext();
             if (valuesList.Count is 0)
             {
                 return;
             }
             await InternalAddPoliciesAsync(section, policyType, valuesList);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
 
         #endregion
@@ -175,63 +211,69 @@ namespace Casbin.Persist.Adapter.EFCore
 
         public virtual void RemovePolicy(string section, string policyType, IPolicyValues values)
         {
+            var dbContext = GetOrResolveDbContext();
             if (values.Count is 0)
             {
                 return;
             }
             InternalRemovePolicy(section, policyType, values);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
         }
 
         public virtual async Task RemovePolicyAsync(string section, string policyType, IPolicyValues values)
         {
+            var dbContext = GetOrResolveDbContext();
             if (values.Count is 0)
             {
                 return;
             }
             InternalRemovePolicy(section, policyType, values);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
 
         public virtual void RemoveFilteredPolicy(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
+            var dbContext = GetOrResolveDbContext();
             if (fieldValues.Count is 0)
             {
                 return;
             }
             InternalRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
         }
 
         public virtual async Task RemoveFilteredPolicyAsync(string section, string policyType, int fieldIndex, IPolicyValues fieldValues)
         {
+            var dbContext = GetOrResolveDbContext();
             if (fieldValues.Count is 0)
             {
                 return;
             }
             InternalRemoveFilteredPolicy(section, policyType, fieldIndex, fieldValues);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
 
 
         public virtual void RemovePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
         {
+            var dbContext = GetOrResolveDbContext();
             if (valuesList.Count is 0)
             {
                 return;
             }
             InternalRemovePolicies(section, policyType, valuesList);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
         }
 
         public virtual async Task RemovePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> valuesList)
         {
+            var dbContext = GetOrResolveDbContext();
             if (valuesList.Count is 0)
             {
                 return;
             }
             InternalRemovePolicies(section, policyType, valuesList);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
 
         #endregion
@@ -240,49 +282,53 @@ namespace Casbin.Persist.Adapter.EFCore
         
         public void UpdatePolicy(string section, string policyType, IPolicyValues oldValues, IPolicyValues newValues)
         {
+            var dbContext = GetOrResolveDbContext();
             if (newValues.Count is 0)
             {
                 return;
             }
-            using var transaction = DbContext.Database.BeginTransaction();
+            using var transaction = dbContext.Database.BeginTransaction();
             InternalUpdatePolicy(section, policyType, oldValues, newValues);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
             transaction.Commit();
         }
 
         public async Task UpdatePolicyAsync(string section, string policyType, IPolicyValues oldValues, IPolicyValues newValues)
         {
+            var dbContext = GetOrResolveDbContext();
             if (newValues.Count is 0)
             {
                 return;
             }
-            await using var transaction = await DbContext.Database.BeginTransactionAsync();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
             await InternalUpdatePolicyAsync(section, policyType, oldValues, newValues);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
         }
 
         public void UpdatePolicies(string section, string policyType, IReadOnlyList<IPolicyValues> oldValuesList, IReadOnlyList<IPolicyValues> newValuesList)
         {
+            var dbContext = GetOrResolveDbContext();
             if (newValuesList.Count is 0)
             {
                 return;
             }
-            using var transaction = DbContext.Database.BeginTransaction();
+            using var transaction = dbContext.Database.BeginTransaction();
             InternalUpdatePolicies(section, policyType, oldValuesList, newValuesList);
-            DbContext.SaveChanges();
+            dbContext.SaveChanges();
             transaction.Commit();
         }
 
         public async Task UpdatePoliciesAsync(string section, string policyType, IReadOnlyList<IPolicyValues> oldValuesList, IReadOnlyList<IPolicyValues> newValuesList)
         {
+            var dbContext = GetOrResolveDbContext();
             if (newValuesList.Count is 0)
             {
                 return;
             }
-            await using var transaction = await DbContext.Database.BeginTransactionAsync();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
             await InternalUpdatePoliciesAsync(section, policyType, oldValuesList, newValuesList);
-            await DbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
         }
 
