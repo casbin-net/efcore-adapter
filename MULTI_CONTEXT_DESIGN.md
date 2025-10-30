@@ -193,6 +193,189 @@ catch
 2. **SQLite Limitation**: SQLite cannot share transactions across separate database files - each file has its own connection
 3. **Connection String Matching**: The adapter detects separate connections via connection string comparison
 
+## 🔒 Transaction Integrity Requirements
+
+**CRITICAL:** Ensuring transaction integrity across multiple contexts is **YOUR (the client/consumer) responsibility**. The adapter provides detection and coordination, but YOU must configure contexts correctly.
+
+### What the Adapter Does
+
+The adapter implements **automatic transaction coordination**:
+
+1. **Detection**: Calls `CanShareTransaction()` to check if all contexts have matching connection strings
+2. **Coordination**: If connection strings match, uses `UseTransaction()` to enlist all contexts in a shared transaction
+3. **Fallback**: If connection strings don't match, uses individual transactions per context (NOT atomic)
+
+### What YOU Must Do
+
+**You are responsible for providing contexts that can share physical connections:**
+
+#### ✅ Required for Transaction Integrity
+
+1. **Provide identical connection strings** across all contexts
+   ```csharp
+   // CORRECT: Same connection string variable
+   string connStr = "Server=localhost;Database=CasbinDB;...";
+   var ctx1 = new CasbinDbContext<int>(BuildOptions(connStr), schemaName: "policies");
+   var ctx2 = new CasbinDbContext<int>(BuildOptions(connStr), schemaName: "groupings");
+   ```
+
+2. **Use databases that support UseTransaction()**
+   - ✅ SQL Server, PostgreSQL, MySQL (same database)
+   - ✅ SQLite (same file path)
+   - ❌ SQLite (different files) - **Cannot share transactions**
+
+3. **Implement a context factory pattern** for consistent configuration:
+   ```csharp
+   public class CasbinContextFactory
+   {
+       private readonly string _connectionString;
+
+       public CasbinDbContext<int> CreatePolicyContext()
+       {
+           var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
+               .UseSqlServer(_connectionString)  // Shared connection string
+               .Options;
+           return new CasbinDbContext<int>(options, schemaName: "policies");
+       }
+
+       public CasbinDbContext<int> CreateGroupingContext()
+       {
+           var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
+               .UseSqlServer(_connectionString)  // Same connection string
+               .Options;
+           return new CasbinDbContext<int>(options, schemaName: "groupings");
+       }
+   }
+   ```
+
+#### ❌ What You DON'T Need to Do
+
+- ❌ Manually call `UseTransaction()` - the adapter handles this internally
+- ❌ Share `DbConnection` objects between contexts
+- ❌ Manage transaction lifecycle - the adapter coordinates commit/rollback
+- ❌ Worry about `DbContextOptions` being different instances - that's fine as long as connection strings match
+
+### Critical Understanding: Connection String ≠ Physical Connection Sharing
+
+**Important distinction:**
+
+- **Connection String Matching**: The adapter uses this to **detect** if transaction sharing is possible
+- **Physical Connection Sharing**: The database uses `UseTransaction()` to **enlist** multiple connection objects into one transaction
+
+**Example - How it actually works:**
+
+```csharp
+// Step 1: You create contexts with same connection string but different DbContextOptions
+var ctx1 = new CasbinDbContext<int>(BuildOptions(connStr), schemaName: "policies");
+var ctx2 = new CasbinDbContext<int>(BuildOptions(connStr), schemaName: "groupings");
+// → Two separate DbContext instances with separate connection objects
+
+// Step 2: You create adapter with provider
+var provider = new PolicyTypeContextProvider(ctx1, ctx2);
+var adapter = new EFCoreAdapter<int>(provider);
+
+// Step 3: When you call SavePolicy(), the adapter:
+// a) Detects both contexts have same connection string via CanShareTransaction()
+// b) Starts transaction on ctx1: var tx = ctx1.Database.BeginTransaction()
+// c) Enlists ctx2 in same transaction: ctx2.Database.UseTransaction(tx.GetDbTransaction())
+// d) Saves changes to both contexts
+// e) Commits transaction (atomic across both)
+
+// YOU didn't call UseTransaction() - the adapter did it for you!
+// YOU only needed to ensure same connection string.
+```
+
+### Why Same Connection String Isn't Sufficient Alone
+
+Having the same connection string is **necessary but not sufficient** for atomicity. You also need:
+
+1. **Database support**: The database must support `UseTransaction()` for enlisting connections
+2. **Same physical database**: Connection strings must point to the same database instance
+   - ✅ `"Server=localhost;Database=CasbinDB;..."` (same database)
+   - ❌ `"Data Source=policy.db"` and `"Data Source=grouping.db"` (different SQLite files)
+
+### Detection vs Enforcement
+
+**The adapter DETECTS connection compatibility but does NOT ENFORCE it:**
+
+- ✅ If `CanShareTransaction()` returns `true`: Uses shared transaction (atomic)
+- ⚠️ If `CanShareTransaction()` returns `false`: Uses individual transactions (NOT atomic)
+- ❌ The adapter does NOT throw errors or prevent you from using incompatible configurations
+
+**This means:**
+- You can use separate SQLite files for testing (individual transactions)
+- The adapter gracefully degrades to non-atomic behavior
+- **You are responsible** for understanding and accepting the trade-offs
+
+### Recommended Patterns
+
+#### Pattern 1: Context Factory (Recommended for Production)
+
+```csharp
+public interface ICasbinContextFactory
+{
+    CasbinDbContext<int> CreateContext(string schemaName);
+}
+
+public class SqlServerCasbinContextFactory : ICasbinContextFactory
+{
+    private readonly string _connectionString;
+
+    public SqlServerCasbinContextFactory(string connectionString)
+    {
+        _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+    }
+
+    public CasbinDbContext<int> CreateContext(string schemaName)
+    {
+        var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
+            .UseSqlServer(_connectionString)  // Guaranteed same connection string
+            .Options;
+        return new CasbinDbContext<int>(options, schemaName: schemaName);
+    }
+}
+
+// Usage
+var factory = new SqlServerCasbinContextFactory(Configuration.GetConnectionString("Casbin"));
+var policyContext = factory.CreateContext("policies");
+var groupingContext = factory.CreateContext("groupings");
+var provider = new PolicyTypeContextProvider(policyContext, groupingContext);
+var adapter = new EFCoreAdapter<int>(provider);
+```
+
+#### Pattern 2: Dependency Injection (ASP.NET Core)
+
+```csharp
+services.AddSingleton<ICasbinContextFactory>(sp =>
+    new SqlServerCasbinContextFactory(Configuration.GetConnectionString("Casbin")));
+
+services.AddScoped<ICasbinDbContextProvider<int>>(sp =>
+{
+    var factory = sp.GetRequiredService<ICasbinContextFactory>();
+    var policyContext = factory.CreateContext("policies");
+    var groupingContext = factory.CreateContext("groupings");
+    return new PolicyTypeContextProvider(policyContext, groupingContext);
+});
+
+services.AddScoped<IAdapter>(sp =>
+{
+    var provider = sp.GetRequiredService<ICasbinDbContextProvider<int>>();
+    return new EFCoreAdapter<int>(provider);
+});
+```
+
+### Summary
+
+| Aspect | Your Responsibility | Adapter Responsibility |
+|--------|-------------------|----------------------|
+| **Provide same connection string** | ✅ YES | ❌ NO |
+| **Implement context factory** | ✅ YES (recommended) | ❌ NO |
+| **Call UseTransaction()** | ❌ NO | ✅ YES |
+| **Detect connection compatibility** | ❌ NO | ✅ YES |
+| **Coordinate transaction commit/rollback** | ❌ NO | ✅ YES |
+| **Understand database limitations** | ✅ YES | ❌ NO |
+| **Accept trade-offs of separate databases** | ✅ YES | ❌ NO |
+
 ### Adaptive Transaction Handling (Implemented)
 
 The adapter implements **adaptive transaction handling** to support both scenarios:
