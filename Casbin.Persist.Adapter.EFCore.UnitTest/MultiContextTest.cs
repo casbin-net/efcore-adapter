@@ -406,9 +406,10 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
                     AsList("alice", "data1", "write")
                 );
             }
-            catch
+            catch (Exception)
             {
-                // If transaction fails, both contexts should be unchanged
+                // Test passed - separate contexts should not throw, even with transactions
+                // Verify data unchanged in case of any unexpected exceptions
                 Assert.Equal(initialPolicyCount, policyContext.Policies.Count());
                 Assert.Equal(initialGroupingCount, groupingContext.Policies.Count());
             }

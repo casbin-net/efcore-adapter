@@ -259,9 +259,10 @@ namespace Casbin.Persist.Adapter.EFCore
                     return connection?.ConnectionString == firstConnectionString;
                 });
             }
-            catch
+            catch (Exception)
             {
-                // If we can't determine, assume separate connections for safety
+                // If we can't determine connection compatibility for any reason,
+                // assume separate connections for safety
                 return false;
             }
         }
