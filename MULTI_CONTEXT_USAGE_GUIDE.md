@@ -20,10 +20,14 @@ Multi-context support allows you to store different Casbin policy types in separ
 
 Create separate `CasbinDbContext` instances for different storage locations.
 
-**⚠️ IMPORTANT for transaction guarantees:** To ensure atomic operations across contexts:
-1. All contexts must use the **same connection string** (same database)
-2. The database must support `UseTransaction()` to share a physical connection object
-3. **Same connection string alone is not enough** - the database must be able to coordinate transactions
+**⚠️ CRITICAL - Transaction Guarantees:**
+
+The adapter detects transaction compatibility by comparing connection strings. If connection strings match, it will attempt to use `UseTransaction()` to coordinate transactions. However:
+
+- **Matching connection strings** tell the adapter to TRY sharing transactions
+- **Actual transaction sharing** depends on the database's ability to coordinate via `UseTransaction()`
+- SQL Server, PostgreSQL, MySQL can share transactions when contexts connect to the **same database**
+- SQLite can share transactions only when contexts use the **same physical file**
 
 **Example: SQL Server with different schemas**
 
@@ -31,13 +35,13 @@ Create separate `CasbinDbContext` instances for different storage locations.
 using Microsoft.EntityFrameworkCore;
 using Casbin.Persist.Adapter.EFCore;
 
-// Define connection string once - REQUIRED for atomic transactions
+// Define connection string once
 string connectionString = "Server=localhost;Database=CasbinDB;Trusted_Connection=True;";
 
 // Policy context - "policies" schema
 var policyContext = new CasbinDbContext<int>(
     new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)  // Same connection string = atomic transactions
+        .UseSqlServer(connectionString)
         .Options,
     schemaName: "policies");
 policyContext.Database.EnsureCreated();
@@ -45,10 +49,14 @@ policyContext.Database.EnsureCreated();
 // Grouping context - "groupings" schema
 var groupingContext = new CasbinDbContext<int>(
     new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)  // Same connection string = atomic transactions
+        .UseSqlServer(connectionString)
         .Options,
     schemaName: "groupings");
 groupingContext.Database.EnsureCreated();
+
+// Note: Even though each UseSqlServer() creates a new connection object,
+// the adapter coordinates transactions via UseTransaction() because the
+// connection strings match and SQL Server supports transaction coordination.
 ```
 
 **Other configuration options:**
