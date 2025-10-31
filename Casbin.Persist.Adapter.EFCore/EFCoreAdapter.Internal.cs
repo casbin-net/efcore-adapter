@@ -195,7 +195,7 @@ namespace Casbin.Persist.Adapter.EFCore
         /// <summary>
         /// Gets the DbSet for policies from the specified context (backward compatible)
         /// </summary>
-        [Obsolete("Use GetCasbinRuleDbSet(DbContext, string) instead")]
+        [Obsolete("Use GetCasbinRuleDbSet(DbContext, string) instead. This method will be removed in a future major version.", false)]
         protected virtual DbSet<TPersistPolicy> GetCasbinRuleDbSet(TDbContext dbContext)
         {
             return GetCasbinRuleDbSet((DbContext)dbContext, null);
