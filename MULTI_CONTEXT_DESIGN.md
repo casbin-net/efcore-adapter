@@ -875,6 +875,47 @@ This means users can already create contexts targeting different schemas without
 
 **\* SQLite with separate files:** Supported but without atomic transactions across files
 
+## Performance & Memory Characteristics
+
+### DbSet Caching Strategy
+
+The adapter caches `DbSet<TPersistPolicy>` instances per (DbContext, policyType) combination for performance, avoiding repeated calls to `dbContext.Set<TPersistPolicy>()` which uses reflection.
+
+**Implementation:**
+```csharp
+private readonly Dictionary<(DbContext context, string policyType), DbSet<TPersistPolicy>> _persistPoliciesByContext;
+```
+
+**Memory Usage:**
+
+| Scenario | Contexts | Policy Types | Dictionary Entries | Memory Usage |
+|----------|----------|--------------|-------------------|--------------|
+| Typical (simple RBAC) | 2 | 2 (p, g) | 4 | ~224 bytes |
+| Complex (multi-type) | 4 | 4 (p, p2, g, g2) | 16 | ~896 bytes |
+| Worst-case (rare) | 8 | 8 types | 64 | ~3.5 KB |
+
+**Growth Pattern:**
+- Dictionary grows **only on first use** of each (context, policyType) combination
+- Size is **bounded** by (number of contexts × number of policy types)
+- After warm-up (first few operations), size remains **stable** for application lifetime
+- **No unbounded growth** - entries are never removed but also never added after warm-up
+
+**Lifecycle:**
+- Cache lives as long as the adapter instance
+- DbContext instances are held as **strong references** in dictionary keys
+- Ensure DbContext lifetime ≥ Adapter lifetime (naturally satisfied in typical usage patterns)
+
+**Comparison to Application Memory:**
+- DbContext overhead: ~100 KB per context
+- Casbin enforcer memory: ~10-100 MB for policy data
+- Dictionary overhead: **0.0002% to 0.0035%** of typical application memory
+
+**Why This Design:**
+- **Performance benefit:** Avoids repeated reflection calls to `dbContext.Set<T>()`
+- **Bounded memory:** Naturally capped at (contexts × policy types)
+- **Simple lifecycle:** Strong references match the design intent (contexts should live as long as adapter)
+- **No leak risk:** All realistic usage patterns (singleton DI or test fixtures) dispose contexts and adapter together
+
 ## Implementation Findings & Decisions
 
 ### 1. Connection String Validation

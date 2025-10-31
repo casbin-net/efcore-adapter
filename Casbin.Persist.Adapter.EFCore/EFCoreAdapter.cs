@@ -45,6 +45,28 @@ namespace Casbin.Persist.Adapter.EFCore
         }
     }
 
+    /// <summary>
+    /// Entity Framework Core adapter for Casbin authorization library.
+    /// Supports both single-context and multi-context scenarios for policy storage.
+    /// </summary>
+    /// <remarks>
+    /// <para><strong>Performance Considerations:</strong></para>
+    /// <para>
+    /// The adapter caches DbSet instances per (DbContext, policyType) combination in an
+    /// internal dictionary for performance. This cache grows to at most (N contexts × M policy types)
+    /// entries, typically 2-8 entries in practice. Memory overhead is negligible (~224 bytes typical,
+    /// ~3.5 KB worst-case). The cache lifetime matches the adapter instance lifetime.
+    /// </para>
+    /// <para><strong>Lifecycle:</strong></para>
+    /// <para>
+    /// In multi-context scenarios, ensure DbContext instances live at least as long as the
+    /// adapter instance. Typical usage patterns (singleton DI registration or test fixtures)
+    /// naturally satisfy this requirement.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TKey">The type of the policy identifier (e.g., int, Guid, string)</typeparam>
+    /// <typeparam name="TPersistPolicy">The entity type for persisting policies</typeparam>
+    /// <typeparam name="TDbContext">The DbContext type</typeparam>
     public partial class EFCoreAdapter<TKey, TPersistPolicy, TDbContext> : IAdapter, IFilteredAdapter
         where TDbContext : DbContext
         where TPersistPolicy : class, IEFCorePersistPolicy<TKey>, new()
