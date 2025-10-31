@@ -160,11 +160,8 @@ namespace Casbin.Persist.Adapter.EFCore
                 {
                     if (context != primaryContext)
                     {
-                        var dbTransaction = (transaction as IInfrastructure<System.Data.Common.DbTransaction>)?.Instance;
-                        if (dbTransaction != null)
-                        {
-                            context.Database.UseTransaction(dbTransaction);
-                        }
+                        var dbTransaction = transaction.GetDbTransaction();
+                        context.Database.UseTransaction(dbTransaction);
                     }
 
                     var dbSet = GetCasbinRuleDbSet(context, null);
@@ -313,12 +310,9 @@ namespace Casbin.Persist.Adapter.EFCore
                 {
                     if (context != primaryContext)
                     {
-                        var dbTransaction = (transaction as IInfrastructure<System.Data.Common.DbTransaction>)?.Instance;
-                        if (dbTransaction != null)
-                        {
-                            // Use synchronous UseTransaction since we're just enlisting in an existing transaction
-                            context.Database.UseTransaction(dbTransaction);
-                        }
+                        var dbTransaction = transaction.GetDbTransaction();
+                        // Use synchronous UseTransaction since we're just enlisting in an existing transaction
+                        context.Database.UseTransaction(dbTransaction);
                     }
 
                     var dbSet = GetCasbinRuleDbSet(context, null);
