@@ -244,7 +244,6 @@ namespace Casbin.Persist.Adapter.EFCore
 
             try
             {
-                // Try to get connection string (available in EF Core 5.0+)
                 var firstConnection = contexts[0].Database.GetDbConnection();
                 var firstConnectionString = firstConnection?.ConnectionString;
 
