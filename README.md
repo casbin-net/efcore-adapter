@@ -105,12 +105,12 @@ enforcer.AddGroupingPolicy("alice", "admin");      // → groupingContext
 enforcer.SavePolicy();                              // Atomic across both
 ```
 
-> **⚠️ IMPORTANT - Transaction Integrity:**
+> **Transaction Integrity:**
 >
-> For atomic operations across contexts, **YOU must ensure all contexts share the same DbConnection object instance**. The adapter detects connection compatibility via reference equality and automatically uses `UseTransaction()` to coordinate shared transactions. Create ONE `DbConnection` object and pass it to all contexts using `.UseSqlServer(connection)` (not `.UseSqlServer(connectionString)`). **Ensuring shared connection objects is YOUR responsibility**. Use a context factory pattern to guarantee consistency.
+> For atomic operations across contexts, all contexts must share the same `DbConnection` object instance. The adapter detects connection compatibility via reference equality and automatically uses `UseTransaction()` to coordinate shared transactions. Create one `DbConnection` object and pass it to all contexts using `.UseSqlServer(connection)` (not `.UseSqlServer(connectionString)`). Ensuring shared connection objects is your responsibility - use a context factory pattern to guarantee consistency.
 >
 > - ✅ **Atomic:** SQL Server, PostgreSQL, MySQL, SQLite (same file) - when sharing same `DbConnection` object
-> - ❌ **NOT Atomic:** Separate `DbConnection` objects, different databases, different connection strings
+> - ❌ **Not Atomic:** Separate `DbConnection` objects, different databases, different connection strings
 >
 > See detailed requirements in the [Transaction Integrity Requirements](MULTI_CONTEXT_USAGE_GUIDE.md#shared-connection-requirements) section.
 
