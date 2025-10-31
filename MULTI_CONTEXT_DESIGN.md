@@ -15,7 +15,6 @@ This document provides technical architecture and implementation details for mul
 
 ### Motivation
 - Store different policy types in separate schemas/tables
-- Apply different retention strategies per policy type
 - Enable multi-tenant scenarios with separate contexts
 - Separate concerns for organizational requirements
 
@@ -25,14 +24,11 @@ This document provides technical architecture and implementation details for mul
 1. Route policy types to different `DbContext` instances
 2. Maintain ACID guarantees when contexts share connections
 3. Preserve backward compatibility
-4. Support sync and async operations
-5. Allow flexible user-defined routing logic
 
 **Technical:**
 1. Use EF Core's `UseTransaction()` for shared transactions
-2. Support all existing operations (Load, Save, Add, Remove, Update, Filter)
-3. Detect connection compatibility at runtime
-4. Gracefully degrade to individual transactions when sharing is not possible
+2. Detect connection compatibility at runtime
+3. Gracefully degrade to individual transactions when sharing is not possible
 
 **Non-Requirements:**
 - Distributed transactions across different databases/servers
@@ -444,12 +440,10 @@ Multiple contexts incur:
 
 **Good Use Cases:**
 - Separate policy and grouping data for compliance
-- Apply different retention policies per type
 - Multi-tenant routing with tenant-specific contexts
 - Organizational separation of concerns
 
 **Not Recommended For:**
-- Performance optimization (adds overhead, not reduces it)
 - Cross-database scenarios requiring atomicity
 - Simple authorization models (single context sufficient)
 
