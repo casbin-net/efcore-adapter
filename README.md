@@ -78,9 +78,19 @@ The adapter supports storing different policy types in separate database context
 ### Quick Example
 
 ```csharp
-// Create contexts for different storage locations
-var policyContext = new CasbinDbContext<int>(policyOptions, schemaName: "policies");
-var groupingContext = new CasbinDbContext<int>(groupingOptions, schemaName: "groupings");
+// Create ONE shared connection object
+var sharedConnection = new SqlConnection(connectionString);
+
+// Create contexts with shared connection
+var policyContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer(sharedConnection).Options,  // Shared connection
+    schemaName: "policies");
+
+var groupingContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer(sharedConnection).Options,  // Same connection
+    schemaName: "groupings");
 
 // Create a provider that routes policy types to contexts
 var provider = new PolicyTypeContextProvider(policyContext, groupingContext);
@@ -97,12 +107,12 @@ enforcer.SavePolicy();                              // Atomic across both
 
 > **⚠️ IMPORTANT - Transaction Integrity:**
 >
-> For atomic operations across contexts, **YOU must ensure all contexts share the same connection string**. The adapter detects connection compatibility and automatically uses `UseTransaction()` to coordinate shared transactions, but **ensuring identical connection strings is YOUR responsibility**. Use a context factory pattern to guarantee consistency.
+> For atomic operations across contexts, **YOU must ensure all contexts share the same DbConnection object instance**. The adapter detects connection compatibility via reference equality and automatically uses `UseTransaction()` to coordinate shared transactions. Create ONE `DbConnection` object and pass it to all contexts using `.UseSqlServer(connection)` (not `.UseSqlServer(connectionString)`). **Ensuring shared connection objects is YOUR responsibility**. Use a context factory pattern to guarantee consistency.
 >
-> - ✅ **Atomic:** SQL Server, PostgreSQL, MySQL, SQLite (same file) - when using identical connection strings
-> - ❌ **NOT Atomic:** SQLite separate files, different databases, different connection strings
+> - ✅ **Atomic:** SQL Server, PostgreSQL, MySQL, SQLite (same file) - when sharing same `DbConnection` object
+> - ❌ **NOT Atomic:** Separate `DbConnection` objects, different databases, different connection strings
 >
-> See detailed requirements in the [Transaction Integrity Requirements](MULTI_CONTEXT_USAGE_GUIDE.md#-transaction-integrity-requirements) section.
+> See detailed requirements in the [Transaction Integrity Requirements](MULTI_CONTEXT_USAGE_GUIDE.md#shared-connection-requirements) section.
 
 ### Documentation
 
