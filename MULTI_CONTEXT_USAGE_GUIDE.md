@@ -18,45 +18,54 @@ Multi-context support allows you to store different Casbin policy types in separ
 
 ### Step 1: Create Database Contexts
 
-Create separate `CasbinDbContext` instances for different storage locations.
+Create separate `CasbinDbContext` instances that **share the same physical DbConnection object**.
 
-**⚠️ CRITICAL - Transaction Guarantees:**
+**⚠️ CRITICAL - Shared Connection Requirement:**
 
-The adapter detects transaction compatibility by comparing connection strings. If connection strings match, it will attempt to use `UseTransaction()` to coordinate transactions. However:
+For atomic transactions across contexts, you MUST pass the **same DbConnection object instance** to all contexts. EF Core's `UseTransaction()` requires reference equality of connection objects, not just matching connection strings.
 
-- **Matching connection strings** tell the adapter to TRY sharing transactions
-- **Actual transaction sharing** depends on the database's ability to coordinate via `UseTransaction()`
-- SQL Server, PostgreSQL, MySQL can share transactions when contexts connect to the **same database**
-- SQLite can share transactions only when contexts use the **same physical file**
-
-**Example: SQL Server with different schemas**
+**✅ CORRECT: Share physical DbConnection object**
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;  // or Npgsql.NpgsqlConnection, etc.
 using Casbin.Persist.Adapter.EFCore;
 
-// Define connection string once
+// Create ONE shared connection object
 string connectionString = "Server=localhost;Database=CasbinDB;Trusted_Connection=True;";
+var sharedConnection = new SqlConnection(connectionString);
 
-// Policy context - "policies" schema
+// Pass SAME connection instance to both contexts
 var policyContext = new CasbinDbContext<int>(
     new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)
+        .UseSqlServer(sharedConnection)  // ← Shared connection object
         .Options,
     schemaName: "policies");
 policyContext.Database.EnsureCreated();
 
-// Grouping context - "groupings" schema
 var groupingContext = new CasbinDbContext<int>(
     new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)
+        .UseSqlServer(sharedConnection)  // ← Same connection object
         .Options,
     schemaName: "groupings");
 groupingContext.Database.EnsureCreated();
+```
 
-// Note: Even though each UseSqlServer() creates a new connection object,
-// the adapter coordinates transactions via UseTransaction() because the
-// connection strings match and SQL Server supports transaction coordination.
+**❌ WRONG: This will NOT provide atomic transactions**
+
+```csharp
+// Each .UseSqlServer(connectionString) creates a DIFFERENT DbConnection object
+var policyContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer(connectionString)  // ← Creates DbConnection #1
+        .Options);
+
+var groupingContext = new CasbinDbContext<int>(
+    new DbContextOptionsBuilder<CasbinDbContext<int>>()
+        .UseSqlServer(connectionString)  // ← Creates DbConnection #2 (different object!)
+        .Options);
+
+// These contexts have different connection objects, so they CANNOT share transactions
 ```
 
 **Other configuration options:**
@@ -147,6 +156,7 @@ bool allowed = enforcer.Enforce("alice", "data1", "read");
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using NetCasbin;
 using Casbin.Persist.Adapter.EFCore;
 
@@ -154,35 +164,40 @@ public class Program
 {
     public static void Main()
     {
-        // 1. Create contexts with same connection string
+        // 1. Create shared connection object
         string connectionString = "Server=localhost;Database=CasbinDB;Trusted_Connection=True;";
+        var sharedConnection = new SqlConnection(connectionString);
 
+        // 2. Create contexts with shared connection
         var policyContext = new CasbinDbContext<int>(
             new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlServer(connectionString).Options,
+                .UseSqlServer(sharedConnection).Options,  // ← Shared connection
             schemaName: "policies");
         policyContext.Database.EnsureCreated();
 
         var groupingContext = new CasbinDbContext<int>(
             new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlServer(connectionString).Options,
+                .UseSqlServer(sharedConnection).Options,  // ← Same connection
             schemaName: "groupings");
         groupingContext.Database.EnsureCreated();
 
-        // 2. Create provider (use implementation from Step 2)
+        // 3. Create provider (use implementation from Step 2)
         var provider = new PolicyTypeContextProvider(policyContext, groupingContext);
 
-        // 3. Create adapter and enforcer
+        // 4. Create adapter and enforcer
         var adapter = new EFCoreAdapter<int>(provider);
         var enforcer = new Enforcer("rbac_model.conf", adapter);
 
-        // 4. Use enforcer
+        // 5. Use enforcer (atomic transactions across both contexts)
         enforcer.AddPolicy("alice", "data1", "read");
         enforcer.AddGroupingPolicy("alice", "admin");
         enforcer.SavePolicy();
 
         bool allowed = enforcer.Enforce("alice", "data1", "read");
         Console.WriteLine($"Alice can read data1: {allowed}");
+
+        // 6. Cleanup
+        sharedConnection.Dispose();
     }
 }
 ```
@@ -214,22 +229,29 @@ enforcer.LoadFilteredPolicy(new Filter
 
 ### Dependency Injection
 
-For ASP.NET Core applications:
+For ASP.NET Core applications with shared connection:
 
 ```csharp
-// Use same connection string for all contexts
-string connectionString = Configuration.GetConnectionString("Casbin");
-
-services.AddSingleton(sp =>
+// Register shared connection as singleton
+services.AddSingleton<DbConnection>(sp =>
 {
+    var connectionString = Configuration.GetConnectionString("Casbin");
+    return new SqlConnection(connectionString);
+});
+
+// Register context provider with shared connection
+services.AddSingleton<ICasbinDbContextProvider<int>>(sp =>
+{
+    var sharedConnection = sp.GetRequiredService<DbConnection>();
+
     var policyCtx = new CasbinDbContext<int>(
         new DbContextOptionsBuilder<CasbinDbContext<int>>()
-            .UseSqlServer(connectionString).Options,
+            .UseSqlServer(sharedConnection).Options,  // Shared connection
         schemaName: "policies");
 
     var groupingCtx = new CasbinDbContext<int>(
         new DbContextOptionsBuilder<CasbinDbContext<int>>()
-            .UseSqlServer(connectionString).Options,
+            .UseSqlServer(sharedConnection).Options,  // Same connection
         schemaName: "groupings");
 
     return new PolicyTypeContextProvider(policyCtx, groupingCtx);
@@ -248,99 +270,116 @@ services.AddSingleton<IEnforcer>(sp =>
 });
 ```
 
+### Connection Lifetime Management
+
+**Important:** When using shared connections, you are responsible for connection lifetime:
+
+**In simple applications:**
+```csharp
+// Create connection
+var connection = new SqlConnection(connectionString);
+
+// Use for contexts/adapter/enforcer
+// ... (create contexts, adapter, enforcer)
+
+// Dispose when done
+connection.Dispose();
+```
+
+**With using statement:**
+```csharp
+using (var connection = new SqlConnection(connectionString))
+{
+    // Create contexts with shared connection
+    var policyCtx = new CasbinDbContext<int>(...);
+    var groupingCtx = new CasbinDbContext<int>(...);
+
+    // Create and use enforcer
+    var provider = new PolicyTypeContextProvider(policyCtx, groupingCtx);
+    var adapter = new EFCoreAdapter<int>(provider);
+    var enforcer = new Enforcer("model.conf", adapter);
+
+    enforcer.LoadPolicy();
+    // ... use enforcer
+
+} // Connection disposed automatically
+```
+
+**In DI scenarios:**
+
+The DbConnection is registered as a singleton and will be disposed when the application shuts down. No manual disposal needed in request handlers.
+
 ## Transaction Behavior
 
-### Connection String Requirements
+### Shared Connection Requirements
 
-**For atomic transactions across contexts, all contexts MUST share the same connection string.**
+**For atomic transactions across contexts, all contexts MUST share the same DbConnection object instance.**
 
-#### ✅ Correct: Shared Connection String
-
-```csharp
-// Define once, use everywhere
-string connectionString = "Server=localhost;Database=CasbinDB;Trusted_Connection=True;";
-
-var policyContext = new CasbinDbContext<int>(
-    new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)  // ← Same variable
-        .Options,
-    schemaName: "policies");
-
-var groupingContext = new CasbinDbContext<int>(
-    new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)  // ← Same variable = atomic
-        .Options,
-    schemaName: "groupings");
-```
-
-**How it works:**
-1. You provide contexts with matching connection strings
-2. Adapter detects compatibility via `CanShareTransaction()`
-3. Adapter uses `UseTransaction()` internally to coordinate
+**How atomic transactions work:**
+1. You create ONE DbConnection object and pass it to all contexts
+2. Adapter detects shared connection via `CanShareTransaction()` (reference equality check)
+3. Adapter uses `UseTransaction()` to enlist all contexts in one transaction
 4. Database ensures atomic commit/rollback across both contexts
 
-#### ❌ Incorrect: Hard-Coded Strings
+**✅ CORRECT Example:**
 
-```csharp
-// WRONG: Even if strings look identical, they might differ slightly
-var policyContext = new CasbinDbContext<int>(
-    new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer("Server=localhost;Database=CasbinDB;...")  // ← Typed separately
-        .Options);
-
-var groupingContext = new CasbinDbContext<int>(
-    new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer("Server=localhost;Database=CasbinDB;...")  // ← Not same string instance
-        .Options);
-```
+Already shown in Step 1 - create shared DbConnection and pass to all contexts.
 
 ### Context Factory Pattern (Recommended)
 
 ```csharp
-public class CasbinContextFactory
+public class CasbinContextFactory : IDisposable
 {
-    private readonly string _connectionString;
+    private readonly DbConnection _sharedConnection;
 
     public CasbinContextFactory(IConfiguration configuration)
     {
-        _connectionString = configuration.GetConnectionString("Casbin");
+        var connectionString = configuration.GetConnectionString("Casbin");
+        _sharedConnection = new SqlConnection(connectionString);  // Create shared connection once
     }
 
     public CasbinDbContext<int> CreateContext(string schemaName)
     {
         var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-            .UseSqlServer(_connectionString)  // Guaranteed same string
+            .UseSqlServer(_sharedConnection)  // ← Share same connection object
             .Options;
         return new CasbinDbContext<int>(options, schemaName: schemaName);
+    }
+
+    public void Dispose()
+    {
+        _sharedConnection?.Dispose();
     }
 }
 
 // Usage
-var factory = new CasbinContextFactory(configuration);
+using var factory = new CasbinContextFactory(configuration);
 var policyContext = factory.CreateContext("policies");
 var groupingContext = factory.CreateContext("groupings");
-// Both contexts guaranteed to share connection string
+// Both contexts share the same physical connection object
 ```
 
 ### Database Compatibility
 
 | Database | Atomic Transactions | Connection Requirement | Notes |
 |----------|-------------------|----------------------|-------|
-| **SQL Server** | ✅ Yes | Same connection string | Works with different schemas/tables |
-| **PostgreSQL** | ✅ Yes | Same connection string | Works with different schemas/tables |
-| **MySQL** | ✅ Yes | Same connection string | Works with different schemas/tables |
-| **SQLite (same file)** | ✅ Yes | Same file path | Different table names only |
-| **SQLite (different files)** | ❌ No | N/A | Cannot share transactions |
+| **SQL Server** | ✅ Yes | Same DbConnection object | Works with different schemas/tables |
+| **PostgreSQL** | ✅ Yes | Same DbConnection object | Works with different schemas/tables |
+| **MySQL** | ✅ Yes | Same DbConnection object | Works with different schemas/tables |
+| **SQLite** | ✅ Yes | Same DbConnection object | Works with different tables in same file |
+
+**Note:** "Same database" requires **same DbConnection object instance**, not just matching connection strings.
 
 ### Responsibility Matrix
 
 | Task | Your Responsibility | Adapter Responsibility |
 |------|-------------------|----------------------|
-| Provide same connection string | ✅ YES | ❌ NO |
+| Create shared DbConnection object | ✅ YES | ❌ NO |
+| Pass same connection to all contexts | ✅ YES | ❌ NO |
+| Manage connection lifetime | ✅ YES | ❌ NO |
 | Use context factory pattern | ✅ YES (recommended) | ❌ NO |
-| Understand database limitations | ✅ YES | ❌ NO |
 | Call `UseTransaction()` | ❌ NO | ✅ YES (internal) |
-| Detect connection compatibility | ❌ NO | ✅ YES |
+| Detect shared connection (reference equality) | ❌ NO | ✅ YES |
 | Coordinate commit/rollback | ❌ NO | ✅ YES |
 
 ### When Separate Connections Are Acceptable

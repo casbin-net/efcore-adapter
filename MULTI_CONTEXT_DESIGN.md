@@ -134,15 +134,15 @@ private bool CanShareTransaction(List<DbContext> contexts)
     try
     {
         var firstConnection = contexts[0].Database.GetDbConnection();
-        var firstConnectionString = firstConnection?.ConnectionString;
 
-        if (string.IsNullOrEmpty(firstConnectionString))
+        if (firstConnection == null)
             return false;
 
+        // Check reference equality - contexts must share the SAME connection object
         return contexts.All(c =>
         {
             var connection = c.Database.GetDbConnection();
-            return connection?.ConnectionString == firstConnectionString;
+            return ReferenceEquals(connection, firstConnection);
         });
     }
     catch (Exception)
@@ -155,14 +155,15 @@ private bool CanShareTransaction(List<DbContext> contexts)
 ```
 
 **Detection Strategy:**
-- Compare connection strings across all contexts
-- If all match → use shared transaction (atomic)
-- If any differ → use individual transactions (not atomic)
+- Check if all contexts share the **same DbConnection object** (reference equality)
+- EF Core's `UseTransaction()` requires the same physical connection instance
+- If all contexts use same DbConnection → use shared transaction (atomic)
+- If any context uses different DbConnection → use individual transactions (not atomic)
 - No errors thrown → graceful degradation
 
 #### Shared Transaction Pattern
 
-When connection strings match:
+When contexts share the same DbConnection object:
 
 ```csharp
 // Pseudocode
@@ -183,7 +184,7 @@ transaction.Commit(); // Atomic across all contexts
 
 #### Individual Transaction Pattern
 
-When connection strings differ (e.g., separate SQLite files):
+When contexts use different DbConnection objects:
 
 ```csharp
 // Pseudocode - WARNING: Not atomic across contexts
@@ -214,8 +215,8 @@ foreach (var context in contexts)
 | **SQLite** | ✅ | N/A | ✅ (same file) | ⚠️ (no atomicity) | ✅ (same file only) |
 
 **Key Constraints:**
-- All contexts must connect to the same database for shared transactions
-- SQLite cannot share transactions across different files
+- All contexts must use the **same DbConnection object instance** for shared transactions
+- Users must explicitly create and pass a shared connection object to all contexts
 - Distributed transactions (cross-database) are not supported
 
 ## Implementation Details

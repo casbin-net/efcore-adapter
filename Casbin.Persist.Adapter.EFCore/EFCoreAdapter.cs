@@ -258,27 +258,36 @@ namespace Casbin.Persist.Adapter.EFCore
             }
         }
 
+        /// <summary>
+        /// Determines if contexts can share a transaction by checking if they use the same physical DbConnection instance.
+        /// </summary>
+        /// <remarks>
+        /// EF Core's UseTransaction() requires that all contexts use the SAME DbConnection object instance
+        /// (reference equality), not just identical connection strings. Users must explicitly create contexts
+        /// with a shared DbConnection object for transaction coordination to work.
+        /// </remarks>
+        /// <param name="contexts">List of contexts to check for shared connection</param>
+        /// <returns>True if all contexts share the same DbConnection instance; otherwise false</returns>
         private bool CanShareTransaction(List<DbContext> contexts)
         {
-            // Check if all contexts share the same connection string
-            // For SQLite, separate database files cannot share transactions
+            // Check if all contexts share the same physical DbConnection object
+            // EF Core's UseTransaction() requires reference equality, not string equality
             if (contexts.Count <= 1) return true;
 
             try
             {
                 var firstConnection = contexts[0].Database.GetDbConnection();
-                var firstConnectionString = firstConnection?.ConnectionString;
 
-                if (string.IsNullOrEmpty(firstConnectionString))
+                if (firstConnection == null)
                 {
-                    // If we can't determine connection strings, assume separate connections
                     return false;
                 }
 
+                // Check reference equality - contexts must share the SAME connection object
                 return contexts.All(c =>
                 {
                     var connection = c.Database.GetDbConnection();
-                    return connection?.ConnectionString == firstConnectionString;
+                    return ReferenceEquals(connection, firstConnection);
                 });
             }
             catch (Exception)
