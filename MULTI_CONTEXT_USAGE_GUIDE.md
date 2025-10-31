@@ -20,19 +20,24 @@ Multi-context support allows you to store different Casbin policy types in separ
 
 Create separate `CasbinDbContext` instances for different storage locations.
 
+**⚠️ IMPORTANT for transaction guarantees:** To ensure atomic operations across contexts:
+1. All contexts must use the **same connection string** (same database)
+2. The database must support `UseTransaction()` to share a physical connection object
+3. **Same connection string alone is not enough** - the database must be able to coordinate transactions
+
 **Example: SQL Server with different schemas**
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using Casbin.Persist.Adapter.EFCore;
 
-// Define connection string once
+// Define connection string once - REQUIRED for atomic transactions
 string connectionString = "Server=localhost;Database=CasbinDB;Trusted_Connection=True;";
 
 // Policy context - "policies" schema
 var policyContext = new CasbinDbContext<int>(
     new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)
+        .UseSqlServer(connectionString)  // Same connection string = atomic transactions
         .Options,
     schemaName: "policies");
 policyContext.Database.EnsureCreated();
@@ -40,7 +45,7 @@ policyContext.Database.EnsureCreated();
 // Grouping context - "groupings" schema
 var groupingContext = new CasbinDbContext<int>(
     new DbContextOptionsBuilder<CasbinDbContext<int>>()
-        .UseSqlServer(connectionString)
+        .UseSqlServer(connectionString)  // Same connection string = atomic transactions
         .Options,
     schemaName: "groupings");
 groupingContext.Database.EnsureCreated();
