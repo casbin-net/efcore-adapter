@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using Casbin.Persist.Adapter.EFCore.Extensions;
 
 namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
 {
@@ -14,7 +15,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
                 {
                     options.UseSqlite("Data Source=CasbinHostTest.db");
                 })
-                .AddScoped<IAdapter, EFCoreAdapter<int>>()
+                .AddEFCoreAdapter<int>()
                 .BuildServiceProvider();
             Server = new TestServer(Services);
         }
