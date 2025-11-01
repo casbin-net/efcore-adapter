@@ -1,8 +1,11 @@
 # EF Core Adapter
 
-[![Actions Status](https://github.com/casbin-net/EFCore-Adapter/workflows/Build/badge.svg)](https://github.com/casbin-net/EFCore-Adapter/actions)
+[![Build Status](https://github.com/casbin-net/efcore-adapter/workflows/Build/badge.svg)](https://github.com/casbin-net/efcore-adapter/actions)
 [![Coverage Status](https://coveralls.io/repos/github/casbin-net/EFCore-Adapter/badge.svg?branch=master)](https://coveralls.io/github/casbin-net/EFCore-Adapter?branch=master)
-[![NuGet](https://buildstats.info/nuget/Casbin.NET.Adapter.EFCore)](https://www.nuget.org/packages/Casbin.NET.Adapter.EFCore)
+[![Nuget](https://img.shields.io/nuget/v/Casbin.NET.Adapter.EFCore.svg)](https://www.nuget.org/packages/Casbin.NET.Adapter.EFCore/)
+[![Release](https://img.shields.io/github/release/casbin-net/efcore-adapter.svg)](https://github.com/casbin-net/efcore-adapter/releases/latest)
+[![Nuget](https://img.shields.io/nuget/dt/Casbin.NET.Adapter.EFCore.svg)](https://www.nuget.org/packages/Casbin.NET.Adapter.EFCore/)
+[![Discord](https://img.shields.io/discord/1022748306096537660?logo=discord&label=discord&color=5865F2)](https://discord.gg/S5UjpzGZjN)
 
 EF Core Adapter is the [EF Core](https://docs.microsoft.com/en-gb/ef/) adapter for [Casbin](https://github.com/casbin/casbin). With this library, Casbin can load policy from EF Core supported database or save policy to it.
 
