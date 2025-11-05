@@ -22,7 +22,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
     public class TransactionIntegrityTests : IClassFixture<TransactionIntegrityTestFixture>, IAsyncLifetime
     {
         private readonly TransactionIntegrityTestFixture _fixture;
-        private const string ModelPath = "examples/rbac_model.conf";
+        private const string ModelPath = "examples/multi_context_model.conf";
 
         public TransactionIntegrityTests(TransactionIntegrityTestFixture fixture)
         {
