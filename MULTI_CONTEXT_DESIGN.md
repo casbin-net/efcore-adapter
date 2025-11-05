@@ -448,10 +448,62 @@ Multiple contexts incur:
 - Cross-database scenarios requiring atomicity
 - Simple authorization models (single context sufficient)
 
+## Verification
+
+### Integration Tests
+
+Transaction integrity guarantees are verified by comprehensive integration tests in:
+- **[TransactionIntegrityTests.cs](../Casbin.Persist.Adapter.EFCore.UnitTest/Integration/TransactionIntegrityTests.cs)** - Proves atomic commit/rollback across multiple contexts
+
+**Test Coverage:**
+
+| Test | Purpose | What It Proves |
+|------|---------|----------------|
+| `SavePolicy_WithSharedConnection_ShouldWriteToAllContextsAtomically` | Happy path atomic write | Policies written to 3 schemas in single transaction |
+| `MultiContextSetup_WithSharedConnection_ShouldShareSamePhysicalConnection` | Connection sharing | Reference equality check confirms shared DbConnection object |
+| `SavePolicy_WhenDuplicateKeyViolationInOneContext_ShouldRollbackAllContexts` | **CRITICAL** Rollback on constraint violation | Failure in one context rolls back all contexts atomically |
+| `SavePolicy_WhenTableMissingInOneContext_ShouldRollbackAllContexts` | Rollback on severe failure | Missing table in one context rolls back all contexts |
+| `MultipleSaveOperations_WithSharedConnection_ShouldMaintainDataConsistency` | Consistency over time | Multiple incremental saves maintain integrity |
+| `SavePolicy_WithSeparateConnections_ShouldNotBeAtomic` | **Negative test** | Proves separate connections do NOT provide atomicity |
+| `SavePolicy_ShouldReflectDatabaseStateNotCasbinMemory` | Database verification | Tests verify actual database state, not just Casbin memory |
+
+**Running Integration Tests:**
+
+```bash
+# Run all integration tests locally
+dotnet test --filter "Category=Integration"
+
+# Run specific test
+dotnet test --filter "FullyQualifiedName~SavePolicy_WhenDuplicateKeyViolationInOneContext_ShouldRollbackAllContexts"
+```
+
+**Note:** Integration tests are excluded from CI/CD (marked with `[Trait("Category", "Integration")]`) as they:
+- Require SQL Server LocalDB
+- Take longer to execute than unit tests
+- Are specific to multi-context functionality validation
+
+### Test Architecture
+
+**Setup:**
+- Uses SQL Server LocalDB for self-contained testing
+- Creates 3 separate schemas: `casbin_policies`, `casbin_groupings`, `casbin_roles`
+- Routes policy types: p → policies, g → groupings, g2 → roles
+- Simulates real multi-context scenarios without external dependencies
+
+**Failure Simulation:**
+- Duplicate key violations (via direct SQL INSERT)
+- Missing tables (via DROP TABLE)
+- Separate connection objects (to prove non-atomicity)
+
+**Verification:**
+- Raw SQL queries to count policies in each schema
+- Reference equality checks on DbConnection objects
+- Database state verification (not just Casbin in-memory state)
+
 ## Status
 
 **Implementation:** ✅ Complete
-**Testing:** ✅ All 120 tests passing (30 tests × 4 frameworks)
+**Testing:** ✅ All 120 unit tests passing (30 tests × 4 frameworks) + 7 integration tests
 **Documentation:** ✅ Complete
 **Breaking Changes:** None - fully backward compatible
 
@@ -460,3 +512,4 @@ Multiple contexts incur:
 - [MULTI_CONTEXT_USAGE_GUIDE.md](MULTI_CONTEXT_USAGE_GUIDE.md) - Step-by-step user guide
 - [ICasbinDbContextProvider Interface](Casbin.Persist.Adapter.EFCore/ICasbinDbContextProvider.cs) - Interface source code
 - [EFCoreAdapter Implementation](Casbin.Persist.Adapter.EFCore/EFCoreAdapter.cs) - Adapter source code
+- [TransactionIntegrityTests.cs](../Casbin.Persist.Adapter.EFCore.UnitTest/Integration/TransactionIntegrityTests.cs) - Integration test suite
