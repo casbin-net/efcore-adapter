@@ -54,6 +54,23 @@ public interface ICasbinDbContextProvider<TKey> where TKey : IEquatable<TKey>
     /// Used for operations that coordinate across all contexts (SavePolicy, LoadPolicy)
     /// </summary>
     IEnumerable<DbContext> GetAllContexts();
+
+    /// <summary>
+    /// Gets the shared DbConnection if all contexts use the same physical connection.
+    /// Returns null if contexts use separate connections.
+    /// </summary>
+    /// <remarks>
+    /// When non-null, the adapter starts transactions at the connection level
+    /// (connection.BeginTransaction()) rather than context level, which is required
+    /// for proper savepoint handling in PostgreSQL and other databases that require
+    /// explicit transaction blocks before creating savepoints.
+    ///
+    /// Return null for scenarios where contexts use separate physical connections
+    /// (e.g., separate SQLite database files), in which case the adapter will use
+    /// separate transactions for each context.
+    /// </remarks>
+    /// <returns>The shared DbConnection, or null if contexts use separate connections</returns>
+    DbConnection? GetSharedConnection();
 }
 ```
 
@@ -61,6 +78,7 @@ public interface ICasbinDbContextProvider<TKey> where TKey : IEquatable<TKey>
 - `GetContextForPolicyType()` must return a valid DbContext for any policy type
 - `GetAllContexts()` must return all distinct contexts (used for SavePolicy, LoadPolicy)
 - Same policy type should always route to the same context instance
+- `GetSharedConnection()` must return the shared DbConnection when all contexts use the same physical connection, or null when contexts use separate connections
 
 #### Default Implementation
 
@@ -80,6 +98,12 @@ public class SingleContextProvider<TKey> : ICasbinDbContextProvider<TKey>
 
     public DbContext GetContextForPolicyType(string policyType) => _context;
     public IEnumerable<DbContext> GetAllContexts() => new[] { _context };
+
+    /// <summary>
+    /// Returns null since single-context scenarios don't have a shared connection
+    /// (only one context, so the concept of "shared" doesn't apply).
+    /// </summary>
+    public DbConnection? GetSharedConnection() => null;
 }
 ```
 
@@ -122,69 +146,88 @@ public partial class EFCoreAdapter<TKey, TPersistPolicy, TDbContext>
 
 ### Transaction Coordination
 
-#### Detection Logic
+#### Provider-Declared Connection Strategy
 
-The adapter automatically detects if contexts can share transactions:
+The adapter uses the provider's `GetSharedConnection()` method to determine transaction strategy:
 
 ```csharp
-private bool CanShareTransaction(List<DbContext> contexts)
+var sharedConnection = _contextProvider?.GetSharedConnection();
+
+if (sharedConnection != null)
 {
-    if (contexts.Count <= 1) return true;
-
-    try
-    {
-        var firstConnection = contexts[0].Database.GetDbConnection();
-
-        if (firstConnection == null)
-            return false;
-
-        // Check reference equality - contexts must share the SAME connection object
-        return contexts.All(c =>
-        {
-            var connection = c.Database.GetDbConnection();
-            return ReferenceEquals(connection, firstConnection);
-        });
-    }
-    catch (Exception)
-    {
-        // If we can't determine connection compatibility for any reason,
-        // assume separate connections for safety
-        return false;
-    }
+    // Use connection-level transaction (atomic)
+    SavePolicyWithSharedTransaction_ConnectionLevel(sharedConnection, contexts, policiesByContext);
+}
+else
+{
+    // Use context-level transactions (not atomic across contexts)
+    SavePolicyWithIndividualTransactions(contexts, policiesByContext);
 }
 ```
 
-**Detection Strategy:**
-- Check if all contexts share the **same DbConnection object** (reference equality)
-- EF Core's `UseTransaction()` requires the same physical connection instance
-- If all contexts use same DbConnection → use shared transaction (atomic)
-- If any context uses different DbConnection → use individual transactions (not atomic)
-- No errors thrown → graceful degradation
+**Strategy:**
+- Provider explicitly declares connection topology via `GetSharedConnection()`
+- If provider returns a DbConnection → all contexts share that connection → use connection-level transaction
+- If provider returns null → contexts use separate connections → use individual transactions
+- No runtime detection → provider knows best about connection strategy
 
-#### Shared Transaction Pattern
+#### Connection-Level Transaction Pattern (PostgreSQL Savepoint Support)
 
-When contexts share the same DbConnection object:
+When provider returns a shared DbConnection:
 
 ```csharp
-// Pseudocode
-var primaryContext = contexts.First();
-using var transaction = primaryContext.Database.BeginTransaction();
+// Actual implementation (simplified)
+var sharedConnection = _contextProvider?.GetSharedConnection();
 
-foreach (var context in contexts)
+if (sharedConnection.State != ConnectionState.Open)
 {
-    if (context != primaryContext)
-        context.Database.UseTransaction(transaction.GetDbTransaction());
-
-    // Perform operations on context
-    context.SaveChanges();
+    sharedConnection.Open();
 }
 
-transaction.Commit(); // Atomic across all contexts
+using var transaction = sharedConnection.BeginTransaction();  // ← Connection-level
+
+try
+{
+    // Enlist all contexts in the connection-level transaction
+    foreach (var context in contexts)
+    {
+        context.Database.UseTransaction(transaction);
+    }
+
+    // Clear and add policies for each context
+    foreach (var contextGroup in policiesByContext)
+    {
+        var dbSet = GetCasbinRuleDbSetForPolicyType(contextGroup.Key, null);
+
+        // Clear existing policies
+        var existingPolicies = dbSet.ToList();
+        dbSet.RemoveRange(existingPolicies);
+        contextGroup.Key.SaveChanges();
+
+        // Add new policies
+        dbSet.AddRange(contextGroup);
+        contextGroup.Key.SaveChanges();
+    }
+
+    transaction.Commit(); // Atomic across all contexts
+}
+catch
+{
+    transaction.Rollback();
+    throw;
+}
 ```
 
-#### Individual Transaction Pattern
+**Key Points:**
+- Transaction started at **connection level** (`connection.BeginTransaction()`) not context level
+- Required for PostgreSQL savepoint handling - PostgreSQL requires explicit `BEGIN` before creating savepoints
+- When EF Core uses `UseTransaction()` with multiple contexts on same connection, it creates savepoints internally
+- PostgreSQL savepoints require an active transaction block at the connection level
+- All contexts enlisted in the same connection-level transaction using `context.Database.UseTransaction()`
 
-When contexts use different DbConnection objects:
+#### Individual Transaction Pattern (Fallback)
+
+When provider returns null (separate connections):
 
 ```csharp
 // Pseudocode - WARNING: Not atomic across contexts
@@ -437,6 +480,79 @@ Multiple contexts incur:
 2. Error handling complexity with individual transactions
 3. Partial failures possible when transaction sharing unavailable
 
+### AutoSave Mode and Transaction Atomicity
+
+The Casbin Enforcer's `EnableAutoSave` setting fundamentally affects transaction atomicity in multi-context scenarios.
+
+**AutoSave ON (Default Behavior):**
+
+When AutoSave is enabled, the Casbin Enforcer immediately calls the adapter's Add/Remove/Update methods for each operation. The adapter then calls `DbContext.SaveChangesAsync()`, which creates an implicit transaction for that single operation.
+
+**Code Flow:**
+1. User calls `enforcer.AddPolicyAsync("alice", "data1", "read")`
+2. Enforcer immediately calls `adapter.AddPolicyAsync(...)`
+3. Adapter calls `context.SaveChangesAsync()` → commits to database
+4. Returns to user
+
+**Implications:**
+- Each operation is atomic in isolation
+- **No transaction coordination across multiple operations**
+- If a sequence of operations fails partway through, earlier operations remain committed
+- The adapter's `SavePolicyAsync()` transaction coordination is bypassed entirely
+
+**AutoSave OFF (Batch Mode):**
+
+When AutoSave is disabled, operations stay in the Enforcer's in-memory policy store. Only when `SavePolicyAsync()` is called does the adapter receive all policies at once, enabling atomic transaction coordination.
+
+**Code Flow:**
+1. User calls `enforcer.AddPolicyAsync("alice", "data1", "read")` → stored in memory
+2. User calls `enforcer.AddGroupingPolicyAsync("alice", "admin")` → stored in memory
+3. User calls `enforcer.SavePolicyAsync()`
+4. Adapter receives ALL policies and uses shared transaction
+5. All contexts commit atomically or all roll back
+
+**Design Implication:**
+
+The adapter **cannot** provide cross-context atomicity when AutoSave is ON because it never receives multiple policies in a single method call. Transaction coordination requires all policies to be processed together in `SavePolicyAsync()`.
+
+**Rollback Test Evidence:**
+
+The integration tests `SavePolicy_WhenTableDroppedInOneContext_ShouldRollbackAllContexts` and `SavePolicy_WhenTableMissingInOneContext_ShouldRollbackAllContexts` originally failed because they used `AddPolicyAsync()` with AutoSave ON (default). This caused policies to commit immediately, preventing rollback verification.
+
+**Fix:** Adding `enforcer.EnableAutoSave(false)` at lines 302 and 370 in `TransactionIntegrityTests.cs` fixed the tests by ensuring policies stayed in memory until `SavePolicyAsync()` was called, allowing proper atomic rollback testing.
+
+**Code Evidence:**
+```csharp
+// TransactionIntegrityTests.cs:302, 370
+try
+{
+    // Disable AutoSave so policies stay in-memory until SavePolicyAsync() is called
+    enforcer.EnableAutoSave(false);
+
+    // Add policies to all contexts (in memory only, AutoSave is OFF)
+    await enforcer.AddPolicyAsync("alice", "data1", "read");
+    await enforcer.AddGroupingPolicyAsync("alice", "admin");
+    await enforcer.AddNamedGroupingPolicyAsync("g2", "admin", "superuser");
+
+    // Simulate failure (e.g., drop table in one context)
+    await _fixture.DropTableAsync(TransactionIntegrityTestFixture.RolesSchema);
+
+    // Try to save - should fail and rollback ALL contexts atomically
+    await adapter.SavePolicyAsync(enforcer.GetModel());
+
+    // Verify all contexts rolled back to 0 policies (atomicity verified)
+}
+```
+
+**Recommendation:**
+
+For multi-context scenarios requiring atomicity:
+1. Use `enforcer.EnableAutoSave(false)`
+2. Ensure all contexts share the same `DbConnection` object
+3. Call `SavePolicyAsync()` to batch commit atomically
+
+**Reference:** See [MULTI_CONTEXT_USAGE_GUIDE.md](MULTI_CONTEXT_USAGE_GUIDE.md#enableautosave-and-transaction-atomicity) for detailed user guidance and examples.
+
 ### When to Use Multi-Context
 
 **Good Use Cases:**
@@ -478,17 +594,22 @@ dotnet test --filter "FullyQualifiedName~SavePolicy_WhenDuplicateKeyViolationInO
 ```
 
 **Note:** Integration tests are excluded from CI/CD (marked with `[Trait("Category", "Integration")]`) as they:
-- Require SQL Server LocalDB
+- Require local PostgreSQL database
 - Take longer to execute than unit tests
 - Are specific to multi-context functionality validation
 
 ### Test Architecture
 
 **Setup:**
-- Uses SQL Server LocalDB for self-contained testing
+- Uses local PostgreSQL database for testing (database `casbin_integration_test` must exist)
 - Creates 3 separate schemas: `casbin_policies`, `casbin_groupings`, `casbin_roles`
 - Routes policy types: p → policies, g → groupings, g2 → roles
-- Simulates real multi-context scenarios without external dependencies
+- Simulates real multi-context scenarios
+
+**Prerequisites to run integration tests:**
+- PostgreSQL running on localhost:5432
+- Database `casbin_integration_test` must exist (schemas created automatically)
+- Connection credentials: postgres/postgres (or update ConnectionString in fixture)
 
 **Failure Simulation:**
 - Duplicate key violations (via direct SQL INSERT)

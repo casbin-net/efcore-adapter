@@ -105,19 +105,25 @@ enforcer.AddGroupingPolicy("alice", "admin");      // → groupingContext
 enforcer.SavePolicy();                              // Atomic across both
 ```
 
-> **Transaction Integrity:**
+> **⚠️ Transaction Integrity Requirements**
 >
-> For atomic operations across contexts, all contexts must share the same `DbConnection` object instance. The adapter detects connection compatibility via reference equality and automatically uses `UseTransaction()` to coordinate shared transactions. Create one `DbConnection` object and pass it to all contexts using `.UseSqlServer(connection)` (not `.UseSqlServer(connectionString)`). Ensuring shared connection objects is your responsibility - use a context factory pattern to guarantee consistency.
+> For atomic multi-context operations:
+> 1. **Share DbConnection:** All contexts must use the **same `DbConnection` object** (reference equality)
+> 2. **Disable AutoSave:** Use `enforcer.EnableAutoSave(false)` and call `SavePolicyAsync()` to batch commit
+> 3. **Supported databases:** PostgreSQL, MySQL, SQL Server, SQLite (same file)
 >
-> - ✅ **Atomic:** SQL Server, PostgreSQL, MySQL, SQLite (same file) - when sharing same `DbConnection` object
-> - ❌ **Not Atomic:** Separate `DbConnection` objects, different databases, different connection strings
+> **Why disable AutoSave?** With `EnableAutoSave(true)` (default), each policy operation commits immediately and independently. If a later operation fails, earlier operations remain committed. With `EnableAutoSave(false)`, all changes stay in memory until `SavePolicyAsync()` commits them atomically across all contexts using a shared connection-level transaction.
 >
-> See detailed requirements in the [Transaction Integrity Requirements](MULTI_CONTEXT_USAGE_GUIDE.md#shared-connection-requirements) section.
+> - ✅ **Atomic:** Same `DbConnection` object + `EnableAutoSave(false)` + `SavePolicyAsync()`
+> - ❌ **Not Atomic:** AutoSave ON, separate `DbConnection` objects, different databases
+>
+> See detailed explanation in [EnableAutoSave and Transaction Atomicity](MULTI_CONTEXT_USAGE_GUIDE.md#enableautosave-and-transaction-atomicity).
 
 ### Documentation
 
 - **[Multi-Context Usage Guide](MULTI_CONTEXT_USAGE_GUIDE.md)** - Complete step-by-step guide with examples
 - **[Multi-Context Design](MULTI_CONTEXT_DESIGN.md)** - Detailed design documentation and limitations
+- **[Integration Tests Setup](Casbin.Persist.Adapter.EFCore.UnitTest/Integration/README.md)** - How to run transaction integrity tests locally
 
 ## Getting Help
 

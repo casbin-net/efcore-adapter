@@ -325,6 +325,157 @@ The DbConnection is registered as a singleton and will be disposed when the appl
 
 Already shown in Step 1 - create shared DbConnection and pass to all contexts.
 
+### EnableAutoSave and Transaction Atomicity
+
+The Casbin Enforcer's `EnableAutoSave` setting fundamentally affects transaction atomicity in multi-context scenarios.
+
+#### Understanding AutoSave Modes
+
+**EnableAutoSave(true) - Immediate Commits (Default)**
+
+When AutoSave is enabled (the default), each `AddPolicy`/`RemovePolicy`/`UpdatePolicy` operation commits immediately to the database.
+
+**Behavior:**
+- Each individual operation is fully atomic (succeeds or fails completely)
+- Each operation creates its own implicit database transaction
+- **No atomicity across multiple operations:**
+  - If you execute 3 operations sequentially and the 3rd fails, the first 2 remain committed
+  - Earlier operations cannot be rolled back when later operations fail
+  - Each operation is independent
+
+**Use Cases:**
+- Real-time policy updates where each change is independent
+- Single-context usage where cross-context atomicity isn't required
+- Scenarios where you can tolerate some operations committing while others don't
+
+**Example - Independent Commits:**
+```csharp
+var enforcer = new Enforcer(model, adapter);
+enforcer.EnableAutoSave(true);  // Default behavior
+
+// Each operation commits immediately and independently:
+await enforcer.AddPolicyAsync("alice", "data1", "read");         // ← Commits to DB now
+await enforcer.AddGroupingPolicyAsync("alice", "admin");         // ← Commits to DB now
+await enforcer.AddNamedGroupingPolicyAsync("g2", "admin", "super"); // ← If this fails...
+
+// ⚠️ The first 2 operations are already committed and CANNOT be rolled back
+```
+
+**EnableAutoSave(false) - Batched Atomic Commits**
+
+When AutoSave is disabled, all operations stay in memory until `enforcer.SavePolicyAsync()` is called.
+
+**Behavior:**
+- Operations stored in Casbin's in-memory policy store (not database)
+- When `SavePolicyAsync()` is called with shared connection:
+  - All contexts enlisted in single connection-level transaction
+  - All operations commit atomically (all-or-nothing)
+  - If any operation fails, entire transaction rolls back
+- **Full atomicity across all operations**
+
+**Use Cases:**
+- Multi-context scenarios requiring atomicity
+- Batch policy updates that must succeed or fail together
+- Critical operations where partial application is unacceptable
+- Production systems with ACID requirements
+
+**Example - Atomic Batch Commit:**
+```csharp
+var enforcer = new Enforcer(model, adapter);
+enforcer.EnableAutoSave(false);  // Disable AutoSave for atomicity
+
+// All operations stay in memory (not committed yet):
+await enforcer.AddPolicyAsync("alice", "data1", "read");         // In memory only
+await enforcer.AddGroupingPolicyAsync("alice", "admin");         // In memory only
+await enforcer.AddNamedGroupingPolicyAsync("g2", "admin", "super"); // In memory only
+
+// Commit all operations atomically (all-or-nothing):
+await enforcer.SavePolicyAsync();  // ← All 3 commit together OR all 3 roll back
+
+// ✅ Either all 3 policies exist in database, or none do
+```
+
+#### Recommendation for Multi-Context Atomicity
+
+> **💡 Best Practice**
+>
+> When using multiple contexts and you need all policy changes to succeed or fail together:
+>
+> 1. **Disable AutoSave:** `enforcer.EnableAutoSave(false)`
+> 2. **Use shared connection:** Ensure all contexts share the same `DbConnection` object (see above)
+> 3. **Batch commit:** Call `await enforcer.SavePolicyAsync()` to commit atomically
+>
+> This ensures all policy changes across all contexts are committed atomically or rolled back together.
+
+#### Real-World Example: Authorization Setup
+
+**Scenario:** Setting up a new user with permissions and role assignments.
+
+**Without Atomicity (AutoSave ON - Default):**
+```csharp
+// AutoSave is ON by default
+await enforcer.AddPolicyAsync("bob", "data1", "read");      // ✓ Committed to policies schema
+await enforcer.AddPolicyAsync("bob", "data1", "write");     // ✓ Committed to policies schema
+await enforcer.AddGroupingPolicyAsync("bob", "admin");      // ✗ FAILS - network error
+
+// Problem: Bob has partial permissions (read/write) but no admin role
+// Result: Inconsistent authorization state
+```
+
+**With Atomicity (AutoSave OFF):**
+```csharp
+enforcer.EnableAutoSave(false);  // Require explicit save
+
+await enforcer.AddPolicyAsync("bob", "data1", "read");      // In memory
+await enforcer.AddPolicyAsync("bob", "data1", "write");     // In memory
+await enforcer.AddGroupingPolicyAsync("bob", "admin");      // In memory
+
+try
+{
+    await enforcer.SavePolicyAsync();  // Atomic commit - all or nothing
+    // ✓ Success: All 3 policies committed
+}
+catch (Exception ex)
+{
+    // ✓ Failure: All 3 policies rolled back automatically
+    // Result: Bob has no permissions (consistent state)
+    Console.WriteLine($"Setup failed: {ex.Message}");
+}
+```
+
+#### Technical Details
+
+**How AutoSave Affects Transaction Coordination:**
+
+With **AutoSave ON**, the Casbin Enforcer immediately calls the adapter's methods for each operation. The adapter has no opportunity to coordinate transactions because it receives operations one at a time.
+
+**Call Flow (AutoSave ON):**
+```
+User: enforcer.AddPolicyAsync()
+  → Enforcer: Immediately calls adapter.AddPolicyAsync()
+    → Adapter: context.SaveChangesAsync() → Database (committed)
+  → Returns to user
+```
+
+With **AutoSave OFF**, operations accumulate in memory. Only when `SavePolicyAsync()` is called does the adapter receive all policies at once, enabling atomic transaction coordination.
+
+**Call Flow (AutoSave OFF):**
+```
+User: enforcer.AddPolicyAsync()
+  → Enforcer: Stores in memory, does NOT call adapter
+  → Returns to user
+
+User: enforcer.SavePolicyAsync()
+  → Enforcer: Calls adapter.SavePolicyAsync() with ALL policies
+    → Adapter: Starts shared transaction
+    → Adapter: Enlists all contexts in transaction
+    → Adapter: Commits/clears all contexts
+    → Adapter: Commits transaction atomically
+  → Returns to user
+```
+
+**For More Details:** See [Integration Test README](Casbin.Persist.Adapter.EFCore.UnitTest/Integration/README.md) for test evidence of this behavior, particularly the rollback tests that require `EnableAutoSave(false)`.
+
 ### Context Factory Pattern (Recommended)
 
 ```csharp
