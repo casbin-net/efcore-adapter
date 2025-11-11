@@ -374,21 +374,18 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         /// <summary>
         /// Tests grouping policies with AutoSave OFF.
         ///
-        /// ⚠️ CURRENTLY FAILING DUE TO CASBIN.NET BUG
+        /// Verifies that AddGroupingPolicy() respects the EnableAutoSave(false) setting.
         ///
-        /// Expected behavior (what this test asserts):
+        /// Expected behavior (verified by this test):
         /// - AddGroupingPolicy() should NOT save to database when AutoSave is OFF
         /// - Only SavePolicy() should commit changes
         ///
-        /// Actual behavior (causes test to fail):
-        /// - AddGroupingPolicy() DOES save to database, ignoring AutoSave setting
+        /// This test now passes with Casbin.NET 2.19.1+ which fixed the AutoSave bug.
         ///
-        /// This test will FAIL until Casbin.NET fixes the bug, then it will PASS.
-        ///
-        /// Related: CASBIN_NET_BUG_NOTES.md, Integration/README.md
+        /// Related: Integration/README.md
         /// </summary>
         [Fact]
-        public async Task TestGroupingPolicyAutoSaveOff_ExpectingFix()
+        public async Task TestGroupingPolicyAutoSaveOff()
         {
             await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
             await connection.OpenAsync();
@@ -448,15 +445,14 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         /// <summary>
         /// Tests async version of grouping policies with AutoSave OFF.
         ///
-        /// ⚠️ CURRENTLY FAILING DUE TO CASBIN.NET BUG
+        /// Verifies that AddGroupingPolicyAsync() respects the EnableAutoSave(false) setting.
         ///
-        /// Expected behavior: AddGroupingPolicyAsync() should NOT save when AutoSave is OFF.
-        /// Actual behavior: It saves immediately, causing this test to fail.
+        /// Expected behavior (verified by this test): AddGroupingPolicyAsync() should NOT save when AutoSave is OFF.
         ///
-        /// This test will FAIL until Casbin.NET fixes the bug, then it will PASS.
+        /// This test now passes with Casbin.NET 2.19.1+ which fixed the AutoSave bug.
         /// </summary>
         [Fact]
-        public async Task TestGroupingPolicyAutoSaveOffAsync_ExpectingFix()
+        public async Task TestGroupingPolicyAutoSaveOffAsync()
         {
             await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
             await connection.OpenAsync();
@@ -557,19 +553,14 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         /// <summary>
         /// Tests AutoSave OFF with multiple contexts and rollback on failure.
         ///
-        /// ⚠️ CURRENTLY FAILING DUE TO CASBIN.NET BUG
+        /// Verifies that:
+        /// - With AutoSave OFF, policies batch in memory (not commit)
+        /// - SavePolicy() uses shared transaction and rolls back atomically on failure
         ///
-        /// Expected behavior (what this test asserts):
-        /// - With AutoSave OFF, policies should batch in memory (not commit)
-        /// - SavePolicy() should use shared transaction and rollback atomically on failure
-        ///
-        /// Actual behavior (causes test to fail):
-        /// - AddGroupingPolicy() DOES save to database, ignoring AutoSave setting
-        ///
-        /// This test will FAIL until Casbin.NET fixes the bug, then it will PASS.
+        /// This test now passes with Casbin.NET 2.19.1+ which fixed the AutoSave bug.
         /// </summary>
         [Fact]
-        public async Task TestAutoSaveOff_MultiContext_RollbackOnFailure_ExpectingFix()
+        public async Task TestAutoSaveOff_MultiContext_RollbackOnFailure()
         {
             _output.WriteLine("=== AUTOSAVE OFF - MULTI-CONTEXT ATOMIC ROLLBACK TEST ===");
             _output.WriteLine("Goal: With AutoSave OFF, SavePolicy should use shared transaction and rollback atomically");
@@ -827,19 +818,13 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         /// <summary>
         /// Tests AutoSave OFF success path with batched commit across multiple contexts.
         ///
-        /// ⚠️ THIS TEST CURRENTLY FAILS DUE TO A BUG IN CASBIN.NET
-        ///
-        /// Goal: Verify that with AutoSave OFF, SavePolicy() batches all operations
+        /// Verifies that with AutoSave OFF, SavePolicy() batches all operations
         /// in a shared transaction and commits atomically.
         ///
-        /// What happens:
-        /// - AddGroupingPolicy() ignores AutoSave OFF and commits immediately
-        /// - Database shows (0, 2, 2) instead of expected (0, 0, 0) before SavePolicy()
-        ///
-        /// This test will PASS once Casbin.NET fixes the bug.
+        /// This test now passes with Casbin.NET 2.19.1+ which fixed the AutoSave bug.
         /// </summary>
         [Fact]
-        public async Task TestAutoSaveOff_MultiContext_BatchedCommit_ExpectingFix()
+        public async Task TestAutoSaveOff_MultiContext_BatchedCommit()
         {
             _output.WriteLine("=== AUTOSAVE OFF - SUCCESS PATH TEST ===");
             _output.WriteLine("Goal: With AutoSave OFF, SavePolicy should batch all operations in shared transaction");
@@ -931,148 +916,6 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
                 Assert.Equal(2, finalCount1);
                 Assert.Equal(2, finalCount2);
                 Assert.Equal(2, finalCount3);
-
-                await policyContext.DisposeAsync();
-                await groupingContext.DisposeAsync();
-                await roleContext.DisposeAsync();
-            }
-            finally
-            {
-                await sharedConnection.DisposeAsync();
-            }
-        }
-
-        /// <summary>
-        /// Minimal reproduction of Casbin.NET AutoSave bug with multi-context setup.
-        ///
-        /// ⚠️ THIS TEST CURRENTLY FAILS DUE TO A BUG IN CASBIN.NET (not in this adapter)
-        ///
-        /// Bug: AddGroupingPolicy() and AddNamedGroupingPolicy() ignore EnableAutoSave(false)
-        /// and write to the database immediately.
-        ///
-        /// Purpose:
-        /// 1. Reference while creating simplified reproduction in Casbin.NET repo
-        /// 2. Verify behavior when Casbin.NET fixes the bug
-        /// 3. Document the multi-context impact of the bug
-        ///
-        /// This test will PASS after Casbin.NET fixes the bug and we update dependency.
-        /// </summary>
-        [Fact]
-        public async Task TestAutoSaveOff_MultiContext_MinimalBugRepro_ExpectingFix()
-        {
-            _output.WriteLine("=== MINIMAL AUTOSAVE OFF BUG REPRODUCTION ===");
-            _output.WriteLine("Goal: Prove whether AutoSave OFF incorrectly saves to database");
-            _output.WriteLine("");
-
-            // STEP 1: Clear ALL data and verify clean slate
-            _output.WriteLine("STEP 1: Clearing all database data...");
-            await _fixture.ClearAllPoliciesAsync();
-
-            var initialPolicy = await _fixture.CountPoliciesInSchemaAsync("casbin_policies");
-            var initialGrouping = await _fixture.CountPoliciesInSchemaAsync("casbin_groupings");
-            var initialRole = await _fixture.CountPoliciesInSchemaAsync("casbin_roles");
-
-            _output.WriteLine($"Initial database state: ({initialPolicy}, {initialGrouping}, {initialRole})");
-            Assert.Equal(0, initialPolicy);
-            Assert.Equal(0, initialGrouping);
-            Assert.Equal(0, initialRole);
-            _output.WriteLine("✓ Database cleared: (0, 0, 0)");
-            _output.WriteLine("");
-
-            // STEP 2: Create fresh contexts (no change tracking contamination)
-            _output.WriteLine("STEP 2: Creating fresh contexts with shared connection...");
-            var sharedConnection = new NpgsqlConnection(_fixture.ConnectionString);
-            await sharedConnection.OpenAsync();
-            _output.WriteLine($"Shared connection: {sharedConnection.GetHashCode()}");
-            _output.WriteLine("");
-
-            try
-            {
-                var options1 = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                    .UseNpgsql(sharedConnection)
-                    .Options;
-                var policyContext = new TestCasbinDbContext1(options1, TransactionIntegrityTestFixture.PoliciesSchema, "casbin_rule");
-
-                var options2 = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                    .UseNpgsql(sharedConnection)
-                    .Options;
-                var groupingContext = new TestCasbinDbContext2(options2, TransactionIntegrityTestFixture.GroupingsSchema, "casbin_rule");
-
-                var options3 = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                    .UseNpgsql(sharedConnection)
-                    .Options;
-                var roleContext = new TestCasbinDbContext3(options3, TransactionIntegrityTestFixture.RolesSchema, "casbin_rule");
-
-                // STEP 3: Create adapter and enforcer with AutoSave OFF
-                _output.WriteLine("STEP 3: Creating enforcer with AutoSave OFF...");
-                var provider = new ThreeWayContextProvider(policyContext, groupingContext, roleContext, sharedConnection);
-                var adapter = new EFCoreAdapter<int>(provider);
-                var model = DefaultModel.CreateFromFile(ModelPath);
-                var enforcer = new Enforcer(model);
-                enforcer.SetAdapter(adapter);
-                enforcer.EnableAutoSave(false);  // CRITICAL!
-                _output.WriteLine("AutoSave disabled");
-                _output.WriteLine("");
-
-                // STEP 4: Add ONE policy of EACH type
-                _output.WriteLine("STEP 4: Adding 1 policy of each type with AutoSave OFF...");
-
-                var addedP = enforcer.AddPolicy("alice", "data1", "read");
-                _output.WriteLine($"  enforcer.AddPolicy returned: {addedP}");
-
-                var addedG = enforcer.AddGroupingPolicy("alice", "admin");
-                _output.WriteLine($"  enforcer.AddGroupingPolicy returned: {addedG}");
-
-                var addedG2 = enforcer.AddNamedGroupingPolicy("g2", "admin", "superuser");
-                _output.WriteLine($"  enforcer.AddNamedGroupingPolicy returned: {addedG2}");
-                _output.WriteLine("");
-
-                // STEP 5: Check database IMMEDIATELY (before SavePolicy)
-                _output.WriteLine("STEP 5: Checking database state BEFORE SavePolicy()...");
-                var beforePolicy = await _fixture.CountPoliciesInSchemaAsync("casbin_policies");
-                var beforeGrouping = await _fixture.CountPoliciesInSchemaAsync("casbin_groupings");
-                var beforeRole = await _fixture.CountPoliciesInSchemaAsync("casbin_roles");
-
-                _output.WriteLine($"Database state BEFORE SavePolicy: ({beforePolicy}, {beforeGrouping}, {beforeRole})");
-                _output.WriteLine("");
-
-                // STEP 6: ASSERTION - Database should be (0, 0, 0)
-                _output.WriteLine("STEP 6: Validating AutoSave OFF behavior...");
-                if (beforePolicy == 0 && beforeGrouping == 0 && beforeRole == 0)
-                {
-                    _output.WriteLine("✓✓✓ BUG DOES NOT EXIST - AutoSave OFF working correctly");
-                    _output.WriteLine("     Policies remained in memory only, database unchanged");
-                }
-                else
-                {
-                    _output.WriteLine("✗✗✗ BUG CONFIRMED - AutoSave OFF saved to database!");
-                    _output.WriteLine($"     Expected: (0, 0, 0), Got: ({beforePolicy}, {beforeGrouping}, {beforeRole})");
-                    _output.WriteLine("     This violates Casbin documentation:");
-                    _output.WriteLine("     'When AutoSave is disabled, policy changes only affect the policy in");
-                    _output.WriteLine("      Casbin enforcer, they do not affect the policy in the storage.'");
-                }
-                _output.WriteLine("");
-
-                Assert.Equal(0, beforePolicy);   // p policies should NOT be in DB
-                Assert.Equal(0, beforeGrouping); // g groupings should NOT be in DB
-                Assert.Equal(0, beforeRole);     // g2 roles should NOT be in DB
-
-                // STEP 7: Call SavePolicy and verify it works
-                _output.WriteLine("STEP 7: Calling SavePolicy() to persist changes...");
-                await enforcer.SavePolicyAsync();
-                _output.WriteLine("SavePolicy() completed");
-                _output.WriteLine("");
-
-                var afterPolicy = await _fixture.CountPoliciesInSchemaAsync("casbin_policies");
-                var afterGrouping = await _fixture.CountPoliciesInSchemaAsync("casbin_groupings");
-                var afterRole = await _fixture.CountPoliciesInSchemaAsync("casbin_roles");
-
-                _output.WriteLine($"Database state AFTER SavePolicy: ({afterPolicy}, {afterGrouping}, {afterRole})");
-
-                Assert.Equal(1, afterPolicy);
-                Assert.Equal(1, afterGrouping);
-                Assert.Equal(1, afterRole);
-                _output.WriteLine("✓ SavePolicy() successfully persisted all policies");
 
                 await policyContext.DisposeAsync();
                 await groupingContext.DisposeAsync();
