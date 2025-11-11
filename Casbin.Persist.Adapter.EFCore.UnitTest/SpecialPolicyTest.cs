@@ -6,13 +6,13 @@ using Xunit;
 
 namespace Casbin.Persist.Adapter.EFCore.UnitTest
 {
-    public class SpecialPolicyTest : TestUtil, IClassFixture<ModelProvideFixture>,
+    public class PolicyEdgeCasesTest : TestUtil, IClassFixture<ModelProvideFixture>,
         IClassFixture<DbContextProviderFixture>
     {
         private readonly ModelProvideFixture _modelProvideFixture;
         private readonly DbContextProviderFixture _dbContextProviderFixture;
 
-        public SpecialPolicyTest(ModelProvideFixture modelProvideFixture,
+        public PolicyEdgeCasesTest(ModelProvideFixture modelProvideFixture,
             DbContextProviderFixture dbContextProviderFixture)
         {
             _modelProvideFixture = modelProvideFixture;

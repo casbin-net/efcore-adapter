@@ -99,11 +99,11 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
         [Fact]
         public void TestSingleContextWithExistingTests()
         {
-            // This test mimics the pattern from AutoTest.cs to ensure compatibility
+            // This test mimics the pattern from EFCoreAdapterTest.cs to ensure compatibility
             using var context = _dbContextProviderFixture.GetContext<int>("ExistingPattern");
             context.Clear();
 
-            // Initialize with data (like InitPolicy in AutoTest.cs)
+            // Initialize with data (like InitPolicy in EFCoreAdapterTest.cs)
             context.Policies.AddRange(new[]
             {
                 new EFCorePersistPolicy<int> { Type = "p", Value1 = "alice", Value2 = "data1", Value3 = "read" },

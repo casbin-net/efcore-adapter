@@ -42,5 +42,15 @@ namespace Casbin.Persist.Adapter.EFCore
         {
             return new[] { _context };
         }
+
+        /// <summary>
+        /// Returns null since single-context scenarios don't have a shared connection
+        /// (only one context, so the concept of "shared" doesn't apply).
+        /// </summary>
+        /// <returns>Always returns null</returns>
+        public System.Data.Common.DbConnection? GetSharedConnection()
+        {
+            return null;
+        }
     }
 }

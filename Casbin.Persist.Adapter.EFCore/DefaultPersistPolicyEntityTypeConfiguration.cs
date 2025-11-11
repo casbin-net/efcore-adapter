@@ -28,14 +28,14 @@ namespace Casbin.Persist.Adapter.EFCore
             builder.Property(p => p.Value4).HasColumnName("v3");
             builder.Property(p => p.Value5).HasColumnName("v4");
             builder.Property(p => p.Value6).HasColumnName("v5");
-            builder.Ignore(p => p.Value7);
-            builder.Ignore(p => p.Value8);
-            builder.Ignore(p => p.Value9);
-            builder.Ignore(p => p.Value10);
-            builder.Ignore(p => p.Value11);
-            builder.Ignore(p => p.Value12);
-            builder.Ignore(p => p.Value13);
-            builder.Ignore(p => p.Value14);
+            builder.Property(p => p.Value7).HasColumnName("v6");
+            builder.Property(p => p.Value8).HasColumnName("v7");
+            builder.Property(p => p.Value9).HasColumnName("v8");
+            builder.Property(p => p.Value10).HasColumnName("v9");
+            builder.Property(p => p.Value11).HasColumnName("v10");
+            builder.Property(p => p.Value12).HasColumnName("v11");
+            builder.Property(p => p.Value13).HasColumnName("v12");
+            builder.Property(p => p.Value14).HasColumnName("v13");
 
             builder.HasIndex(p => p.Type);
             builder.HasIndex(p => p.Value1);

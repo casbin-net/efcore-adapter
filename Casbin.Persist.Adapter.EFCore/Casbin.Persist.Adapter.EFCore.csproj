@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Casbin.NET" Version="2.16.0" />
+    <PackageReference Include="Casbin.NET" Version="2.19.1" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
