@@ -25,7 +25,19 @@
       "Bash(git checkout:*)",
       "Bash(git stash:*)",
       "Bash(Select-String -Pattern \"error|Build succeeded|Build FAILED\" -Context 0,2)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(psql:*)",
+      "Bash(Select-Object -First 200)",
+      "Bash(dotnet run:*)",
+      "Bash(dir:*)",
+      "Bash(nul)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
+      "Bash(Select-String -Pattern \"Test Run|Total tests|Passed|Failed\")",
+      "Bash(findstr:*)",
+      "Bash(.gitignore)"
     ],
     "deny": [],
     "ask": []

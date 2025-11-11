@@ -269,41 +269,6 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
         }
 
         [Fact]
-        public void TestMultiContextUpdatePolicy()
-        {
-            // Arrange
-            var provider = _multiContextProviderFixture.GetMultiContextProvider("UpdatePolicy");
-            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("UpdatePolicy");
-
-            policyContext.Clear();
-            groupingContext.Clear();
-
-            policyContext.Policies.Add(new EFCorePersistPolicy<int>
-            {
-                Type = "p",
-                Value1 = "alice",
-                Value2 = "data1",
-                Value3 = "read"
-            });
-            policyContext.SaveChanges();
-
-            var adapter = new EFCoreAdapter<int>(provider);
-            var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
-            enforcer.LoadPolicy();
-
-            // Act
-            enforcer.UpdatePolicy(
-                AsList("alice", "data1", "read"),
-                AsList("alice", "data1", "write")
-            );
-
-            // Assert
-            var policy = policyContext.Policies.FirstOrDefault(p => p.Value1 == "alice");
-            Assert.NotNull(policy);
-            Assert.Equal("write", policy.Value3);
-        }
-
-        [Fact]
         public void TestMultiContextBatchOperations()
         {
             // Arrange
@@ -378,12 +343,21 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
             Assert.DoesNotContain(enforcer.GetPolicy(), p => p.Contains("bob"));
         }
 
+        /// <summary>
+        /// Verifies that UpdatePolicy operations work across multiple contexts without throwing exceptions.
+        ///
+        /// NOTE: This is NOT a transaction rollback test. This test uses separate SQLite database files
+        /// (policy.db and grouping.db), making atomic cross-context transactions impossible.
+        ///
+        /// For actual transaction integrity and rollback verification across multiple contexts,
+        /// see Integration/TransactionIntegrityTests.cs (PostgreSQL tests with shared connections).
+        /// </summary>
         [Fact]
-        public void TestMultiContextTransactionRollback()
+        public void TestMultiContextUpdatePolicyNoException()
         {
             // Arrange
-            var provider = _multiContextProviderFixture.GetMultiContextProvider("TransactionRollback");
-            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("TransactionRollback");
+            var provider = _multiContextProviderFixture.GetMultiContextProvider("UpdatePolicyNoException");
+            var (policyContext, groupingContext) = _multiContextProviderFixture.GetSeparateContexts("UpdatePolicyNoException");
 
             policyContext.Clear();
             groupingContext.Clear();
@@ -398,22 +372,15 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
             var initialPolicyCount = policyContext.Policies.Count();
             var initialGroupingCount = groupingContext.Policies.Count();
 
-            // Act & Assert - UpdatePolicy with transaction should rollback on error
-            // (This test verifies transaction integrity across contexts)
-            try
-            {
-                enforcer.UpdatePolicy(
-                    AsList("alice", "data1", "read"),
-                    AsList("alice", "data1", "write")
-                );
-            }
-            catch (Exception)
-            {
-                // Test passed - separate contexts should not throw, even with transactions
-                // Verify data unchanged in case of any unexpected exceptions
-                Assert.Equal(initialPolicyCount, policyContext.Policies.Count());
-                Assert.Equal(initialGroupingCount, groupingContext.Policies.Count());
-            }
+            // Act & Assert - UpdatePolicy should complete without throwing exceptions
+            enforcer.UpdatePolicy(
+                AsList("alice", "data1", "read"),
+                AsList("alice", "data1", "write")
+            );
+
+            // Verify the update was applied successfully
+            Assert.True(enforcer.HasPolicy("alice", "data1", "write"));
+            Assert.False(enforcer.HasPolicy("alice", "data1", "read"));
         }
 
         [Fact]

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace Casbin.Persist.Adapter.EFCore
@@ -24,5 +25,22 @@ namespace Casbin.Persist.Adapter.EFCore
         /// </summary>
         /// <returns>An enumerable of all distinct DbContext instances</returns>
         IEnumerable<DbContext> GetAllContexts();
+
+        /// <summary>
+        /// Gets the shared DbConnection if all contexts use the same physical connection.
+        /// Returns null if contexts use separate connections.
+        /// </summary>
+        /// <remarks>
+        /// When non-null, the adapter starts transactions at the connection level
+        /// (connection.BeginTransaction()) rather than context level, which is required
+        /// for proper savepoint handling in PostgreSQL and other databases that require
+        /// explicit transaction blocks before creating savepoints.
+        ///
+        /// Return null for scenarios where contexts use separate physical connections
+        /// (e.g., separate SQLite database files), in which case the adapter will use
+        /// separate transactions for each context.
+        /// </remarks>
+        /// <returns>The shared DbConnection, or null if contexts use separate connections</returns>
+        DbConnection? GetSharedConnection();
     }
 }

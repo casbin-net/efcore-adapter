@@ -6,13 +6,13 @@ using Xunit;
 
 namespace Casbin.Persist.Adapter.EFCore.UnitTest
 {
-    public class SpecialPolicyTest : TestUtil, IClassFixture<ModelProvideFixture>,
+    public class PolicyEdgeCasesTest : TestUtil, IClassFixture<ModelProvideFixture>,
         IClassFixture<DbContextProviderFixture>
     {
         private readonly ModelProvideFixture _modelProvideFixture;
         private readonly DbContextProviderFixture _dbContextProviderFixture;
 
-        public SpecialPolicyTest(ModelProvideFixture modelProvideFixture,
+        public PolicyEdgeCasesTest(ModelProvideFixture modelProvideFixture,
             DbContextProviderFixture dbContextProviderFixture)
         {
             _modelProvideFixture = modelProvideFixture;
@@ -40,7 +40,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
                     m = eval(p.rule)
                 """
             ), adapter);
-            enforcer.AddFunction("equal", (a1, a2) => a1 == a2);
+            enforcer.AddFunction("equal", (string a1, string a2) => a1 == a2);
 
             enforcer.AddPolicy("equal(p.a1, p.a2)", "a1", "a1");
             Assert.True(enforcer.Enforce("_"));

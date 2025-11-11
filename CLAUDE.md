@@ -79,16 +79,31 @@ When modifying dependencies, ensure changes are made to ALL framework-specific I
 The adapter implements `IFilteredAdapter` for loading subsets of policies:
 - `LoadFilteredPolicy()` / `LoadFilteredPolicyAsync()` - loads only policies matching the filter
 - Sets `IsFiltered = true` to indicate partial policy load
-- See Filter class usage in AutoTest.cs:142-165 for examples
+- See Filter class usage in EFCoreAdapterTest.cs:142-165 for examples
 
 ## Testing Strategy
 
+### Unit Tests (SQLite)
 Tests use xUnit with fixtures:
 - **ModelProvideFixture**: Provides Casbin model configurations
 - **DbContextProviderFixture**: Provides test database contexts (SQLite in-memory)
-- **AutoTest.cs**: Main test suite covering all adapter operations
+- **EFCoreAdapterTest.cs**: Main test suite covering all adapter operations
 - **DependencyInjectionTest.cs**: Tests for DI scenarios
-- **SpecialPolicyTest.cs**: Edge cases and special scenarios
+- **PolicyEdgeCasesTest.cs**: Edge cases and special scenarios
+- **MultiContextTest.cs**: Multi-context functional tests using separate SQLite database files
+
+**Important**: SQLite unit tests use **separate database files** for each context (policy.db, grouping.db).
+This means each context has its own connection, making atomic cross-context transactions impossible.
+These tests verify functional correctness but **cannot test transaction rollback across contexts**.
+
+### Integration Tests (PostgreSQL)
+- **Integration/TransactionIntegrityTests.cs**: Atomic transaction and rollback verification
+- **Integration/SchemaDistributionTests.cs**: Policy distribution across schemas
+- **Integration/AutoSaveTests.cs**: AutoSave behavior with single and multiple contexts
+
+**Important**: PostgreSQL integration tests use **one shared connection** with multiple schemas.
+This enables testing of atomic transactions and rollback across multiple contexts.
+These tests are marked `[Trait("Category", "Integration")]` and excluded from CI/CD.
 
 Test data files in `Casbin.Persist.Adapter.EFCore.UnitTest\examples\`:
 - `rbac_model.conf`: RBAC model definition

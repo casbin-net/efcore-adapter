@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Casbin;
 using Casbin.Persist.Adapter.EFCore.Entities;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -18,7 +18,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
     /// Run locally with: dotnet test --filter "Category=Integration"
     /// </summary>
     [Trait("Category", "Integration")]
-    [Collection("TransactionIntegrity")]
+    [Collection("IntegrationTests")]
     public class TransactionIntegrityTests : IClassFixture<TransactionIntegrityTestFixture>, IAsyncLifetime
     {
         private readonly TransactionIntegrityTestFixture _fixture;
@@ -31,7 +31,53 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
 
         public Task InitializeAsync() => _fixture.ClearAllPoliciesAsync();
 
-        public Task DisposeAsync() => Task.CompletedTask;
+        public Task DisposeAsync() => _fixture.RunMigrationsAsync();
+
+        #region Helper: Derived Context Classes
+
+        /// <summary>
+        /// Derived context for policies schema
+        /// </summary>
+        public class TestCasbinDbContext1 : CasbinDbContext<int>
+        {
+            public TestCasbinDbContext1(
+                DbContextOptions<CasbinDbContext<int>> options,
+                string schemaName,
+                string tableName)
+                : base(options, schemaName, tableName)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Derived context for groupings schema
+        /// </summary>
+        public class TestCasbinDbContext2 : CasbinDbContext<int>
+        {
+            public TestCasbinDbContext2(
+                DbContextOptions<CasbinDbContext<int>> options,
+                string schemaName,
+                string tableName)
+                : base(options, schemaName, tableName)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Derived context for roles schema
+        /// </summary>
+        public class TestCasbinDbContext3 : CasbinDbContext<int>
+        {
+            public TestCasbinDbContext3(
+                DbContextOptions<CasbinDbContext<int>> options,
+                string schemaName,
+                string tableName)
+                : base(options, schemaName, tableName)
+            {
+            }
+        }
+
+        #endregion
 
         #region Helper Methods
 
@@ -46,15 +92,18 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
             private readonly DbContext _policyContext;
             private readonly DbContext _groupingContext;
             private readonly DbContext _roleContext;
+            private readonly System.Data.Common.DbConnection? _sharedConnection;
 
             public ThreeWayPolicyTypeProvider(
                 DbContext policyContext,
                 DbContext groupingContext,
-                DbContext roleContext)
+                DbContext roleContext,
+                System.Data.Common.DbConnection? sharedConnection)
             {
                 _policyContext = policyContext ?? throw new ArgumentNullException(nameof(policyContext));
                 _groupingContext = groupingContext ?? throw new ArgumentNullException(nameof(groupingContext));
                 _roleContext = roleContext ?? throw new ArgumentNullException(nameof(roleContext));
+                _sharedConnection = sharedConnection;
             }
 
             public DbContext GetContextForPolicyType(string policyType)
@@ -80,15 +129,20 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
             {
                 return new[] { _policyContext, _groupingContext, _roleContext };
             }
+
+            public System.Data.Common.DbConnection? GetSharedConnection()
+            {
+                return _sharedConnection;
+            }
         }
 
         /// <summary>
         /// Creates an enforcer with three contexts sharing the same DbConnection
         /// </summary>
-        private async Task<(Enforcer enforcer, SqlConnection connection)> CreateEnforcerWithSharedConnectionAsync()
+        private async Task<(Enforcer enforcer, NpgsqlConnection connection)> CreateEnforcerWithSharedConnectionAsync()
         {
             // Create ONE shared connection
-            var connection = new SqlConnection(_fixture.ConnectionString);
+            var connection = new NpgsqlConnection(_fixture.ConnectionString);
             await connection.OpenAsync();
 
             // Create three contexts sharing the same connection
@@ -97,7 +151,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
             var roleContext = CreateContext(connection, TransactionIntegrityTestFixture.RolesSchema);
 
             // Create provider routing policy types to appropriate contexts
-            var provider = new ThreeWayPolicyTypeProvider(policyContext, groupingContext, roleContext);
+            var provider = new ThreeWayPolicyTypeProvider(policyContext, groupingContext, roleContext, connection);
 
             // Create adapter and enforcer
             var adapter = new EFCoreAdapter<int>(provider);
@@ -115,9 +169,9 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         private async Task<Enforcer> CreateEnforcerWithSeparateConnectionsAsync()
         {
             // Create THREE separate connections with same connection string
-            var policyConnection = new SqlConnection(_fixture.ConnectionString);
-            var groupingConnection = new SqlConnection(_fixture.ConnectionString);
-            var roleConnection = new SqlConnection(_fixture.ConnectionString);
+            var policyConnection = new NpgsqlConnection(_fixture.ConnectionString);
+            var groupingConnection = new NpgsqlConnection(_fixture.ConnectionString);
+            var roleConnection = new NpgsqlConnection(_fixture.ConnectionString);
 
             await policyConnection.OpenAsync();
             await groupingConnection.OpenAsync();
@@ -129,7 +183,8 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
             var roleContext = CreateContext(roleConnection, TransactionIntegrityTestFixture.RolesSchema);
 
             // Create provider routing policy types to appropriate contexts
-            var provider = new ThreeWayPolicyTypeProvider(policyContext, groupingContext, roleContext);
+            // Pass null for shared connection since these contexts use separate connections
+            var provider = new ThreeWayPolicyTypeProvider(policyContext, groupingContext, roleContext, null);
 
             // Create adapter and enforcer
             var adapter = new EFCoreAdapter<int>(provider);
@@ -140,13 +195,21 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
             return enforcer;
         }
 
-        private CasbinDbContext<int> CreateContext(SqlConnection connection, string schemaName)
+        private CasbinDbContext<int> CreateContext(NpgsqlConnection connection, string schemaName)
         {
             var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-                .UseSqlServer(connection, b => b.MigrationsHistoryTable("__EFMigrationsHistory", schemaName))
+                .UseNpgsql(connection, b => b.MigrationsHistoryTable("__EFMigrationsHistory", schemaName))
                 .Options;
 
-            return new CasbinDbContext<int>(options, schemaName: schemaName);
+            // Return appropriate derived context based on schema name
+            if (schemaName == TransactionIntegrityTestFixture.PoliciesSchema)
+                return new TestCasbinDbContext1(options, schemaName, "casbin_rule");
+            else if (schemaName == TransactionIntegrityTestFixture.GroupingsSchema)
+                return new TestCasbinDbContext2(options, schemaName, "casbin_rule");
+            else if (schemaName == TransactionIntegrityTestFixture.RolesSchema)
+                return new TestCasbinDbContext3(options, schemaName, "casbin_rule");
+            else
+                throw new ArgumentException($"Unknown schema name: {schemaName}", nameof(schemaName));
         }
 
         #endregion
@@ -196,7 +259,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         public async Task MultiContextSetup_WithSharedConnection_ShouldShareSamePhysicalConnection()
         {
             // Arrange
-            var connection = new SqlConnection(_fixture.ConnectionString);
+            var connection = new NpgsqlConnection(_fixture.ConnectionString);
             await connection.OpenAsync();
 
             try
@@ -225,36 +288,31 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
 
         #endregion
 
-        #region Test 3: Rollback - Duplicate Key Violation (CRITICAL TEST)
+        #region Test 3: Rollback - Missing Table (CRITICAL TEST)
 
         [Fact]
-        public async Task SavePolicy_WhenDuplicateKeyViolationInOneContext_ShouldRollbackAllContexts()
+        public async Task SavePolicy_WhenTableDroppedInOneContext_ShouldRollbackAllContexts()
         {
-            // Arrange - Insert conflicting policy DIRECTLY into database
-            await _fixture.InsertPolicyDirectlyAsync(
-                TransactionIntegrityTestFixture.RolesSchema,
-                "g2",
-                "admin",
-                "superuser");
-
+            // Arrange
             var (enforcer, connection) = await CreateEnforcerWithSharedConnectionAsync();
 
             try
             {
-                // Add NEW policies to other contexts
-                await enforcer.AddPolicyAsync("alice", "data1", "read");   // → policies schema
-                await enforcer.AddGroupingPolicyAsync("alice", "admin");    // → groupings schema
+                // Disable AutoSave so policies stay in-memory until SavePolicyAsync() is called
+                enforcer.EnableAutoSave(false);
 
-                // Manipulate Casbin's memory to force duplicate in roles schema
-                // Remove the policy from memory (Casbin doesn't know it exists in DB yet due to LoadPolicy timing)
-                var removed = await enforcer.RemoveNamedGroupingPolicyAsync("g2", "admin", "superuser");
+                // Add policies to all contexts (in memory only, AutoSave is OFF)
+                await enforcer.AddPolicyAsync("alice", "data1", "read");           // → policies schema
+                await enforcer.AddGroupingPolicyAsync("alice", "admin");            // → groupings schema
+                await enforcer.AddNamedGroupingPolicyAsync("g2", "admin", "superuser"); // → roles schema
 
-                // Add it back - Casbin thinks it's new, but database already has it
-                var added = await enforcer.AddNamedGroupingPolicyAsync("g2", "admin", "superuser");
+                // Drop table in roles schema AFTER policies are in memory but BEFORE SavePolicy
+                // This simulates a catastrophic failure scenario where database schema is inconsistent
+                await _fixture.DropTableAsync(TransactionIntegrityTestFixture.RolesSchema);
 
                 Exception caughtException = null;
 
-                // Act - Try to save, should throw due to duplicate key in roles schema
+                // Act - Try to save, should throw due to missing table in roles schema
                 try
                 {
                     await enforcer.SavePolicyAsync();
@@ -267,7 +325,11 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
                 // Assert - Verify exception was thrown
                 Assert.NotNull(caughtException);
 
-                // CRITICAL ASSERTION - Verify ZERO policies in functioning contexts (rollback successful)
+                // Recreate table for verification queries
+                await _fixture.RunMigrationsAsync();
+
+                // CRITICAL ASSERTION - Verify ZERO policies in all contexts (rollback successful)
+                // This proves that when one context fails, ALL contexts roll back atomically
                 var policiesCount = await _fixture.CountPoliciesInSchemaAsync(
                     TransactionIntegrityTestFixture.PoliciesSchema, "p");
                 var groupingsCount = await _fixture.CountPoliciesInSchemaAsync(
@@ -275,10 +337,10 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
                 var rolesCount = await _fixture.CountPoliciesInSchemaAsync(
                     TransactionIntegrityTestFixture.RolesSchema, "g2");
 
-                // Verify atomicity: All contexts rolled back except the pre-existing conflict
+                // Verify atomicity: All contexts rolled back (no partial commits)
                 Assert.Equal(0, policiesCount);   // Should be 0 (rolled back)
                 Assert.Equal(0, groupingsCount);  // Should be 0 (rolled back)
-                Assert.Equal(1, rolesCount);      // Should be 1 (the original conflict we inserted)
+                Assert.Equal(0, rolesCount);      // Should be 0 (rolled back)
 
                 // If we got here, atomicity is PROVEN!
             }
@@ -286,6 +348,9 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
             {
                 await connection.CloseAsync();
                 await connection.DisposeAsync();
+
+                // Restore table for subsequent tests
+                await _fixture.RunMigrationsAsync();
             }
         }
 
@@ -301,6 +366,9 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
 
             try
             {
+                // Disable AutoSave so policies stay in-memory until SavePolicyAsync() is called
+                enforcer.EnableAutoSave(false);
+
                 // Add policies to all contexts
                 await enforcer.AddPolicyAsync("alice", "data1", "read");
                 await enforcer.AddGroupingPolicyAsync("alice", "admin");

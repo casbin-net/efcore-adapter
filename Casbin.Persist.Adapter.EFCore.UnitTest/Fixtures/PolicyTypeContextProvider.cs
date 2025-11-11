@@ -39,5 +39,12 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
         {
             return new DbContext[] { _policyContext, _groupingContext };
         }
+
+        public System.Data.Common.DbConnection? GetSharedConnection()
+        {
+            // Return null since this provider uses separate SQLite database files
+            // (each context has its own connection)
+            return null;
+        }
     }
 }
