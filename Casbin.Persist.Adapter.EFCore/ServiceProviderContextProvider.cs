@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace Casbin.Persist.Adapter.EFCore
@@ -29,6 +30,12 @@ namespace Casbin.Persist.Adapter.EFCore
         public IEnumerable<DbContext> GetAllContexts()
         {
             yield return GetOrResolveContext();
+        }
+
+        public DbConnection GetSharedConnection()
+        {
+            // Single context - return its connection for shared transaction support
+            return GetOrResolveContext().Database.GetDbConnection();
         }
 
         private TDbContext GetOrResolveContext()
