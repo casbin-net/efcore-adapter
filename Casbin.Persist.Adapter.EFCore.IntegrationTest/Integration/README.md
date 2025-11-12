@@ -2,6 +2,20 @@
 
 This directory contains integration tests that verify the transaction integrity guarantees of the multi-context EFCore adapter feature.
 
+## Separate Test Project
+
+These integration tests are in a **separate test project** (`Casbin.Persist.Adapter.EFCore.IntegrationTest`) to enable sequential framework execution.
+
+**Why separate?**
+- Integration tests run frameworks **sequentially** (one at a time) to avoid PostgreSQL database conflicts
+- Unit tests continue running frameworks **in parallel** for faster execution
+- .NET 9+ runs multi-targeted tests in parallel by default - this separation allows different configurations
+
+**Project Settings:**
+- `<TestTfmsInParallel>false</TestTfmsInParallel>` - Frameworks execute sequentially
+- Shares single PostgreSQL database: `casbin_integration_test`
+- Uses `DisableParallelization = true` on test collection for within-framework sequencing
+
 ## ✅ Casbin.NET AutoSave Bug - FIXED in v2.19.1
 
 ### Test Status Summary

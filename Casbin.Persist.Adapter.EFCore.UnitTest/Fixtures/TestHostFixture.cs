@@ -10,10 +10,13 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
     {
         public TestHostFixture()
         {
+            // Use unique database name to allow parallel test execution
+            var uniqueDbName = $"CasbinHostTest_{Guid.NewGuid():N}.db";
+
             Services = new ServiceCollection()
                 .AddDbContext<CasbinDbContext<int>>(options =>
                 {
-                    options.UseSqlite("Data Source=CasbinHostTest.db");
+                    options.UseSqlite($"Data Source={uniqueDbName}");
                 })
                 .AddEFCoreAdapter<int>()
                 .BuildServiceProvider();

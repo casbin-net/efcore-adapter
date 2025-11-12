@@ -105,11 +105,16 @@ namespace Casbin.Persist.Adapter.EFCore
         public EFCoreAdapter(IServiceProvider serviceProvider)
         {
             if (serviceProvider == null) throw new ArgumentNullException(nameof(serviceProvider));
-            _contextProvider = new ServiceProviderContextProvider<TKey, TDbContext>(serviceProvider);
-            _persistPoliciesByContext = new Dictionary<(DbContext context, string policyType), DbSet<TPersistPolicy>>();
 
-            // Eagerly resolve to set DbContext property for backward compatibility
-            DbContext = (TDbContext)_contextProvider.GetAllContexts().First();
+            // Resolve DbContext from service provider
+            var context = serviceProvider.GetService(typeof(TDbContext)) as TDbContext
+                ?? throw new InvalidOperationException(
+                    $"Unable to resolve service for type '{typeof(TDbContext)}' from IServiceProvider. " +
+                    $"Ensure the DbContext is registered in the service collection.");
+
+            DbContext = context;
+            _contextProvider = new SingleContextProvider<TKey>(context);
+            _persistPoliciesByContext = new Dictionary<(DbContext context, string policyType), DbSet<TPersistPolicy>>();
         }
 
         /// <summary>
