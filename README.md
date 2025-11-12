@@ -27,6 +27,16 @@ You can see all the list at [Database Providers](https://docs.microsoft.com/en-g
 dotnet add package Casbin.NET.Adapter.EFCore
 ```
 
+## Supported Frameworks
+
+The adapter supports the following .NET target frameworks:
+- .NET 9.0
+- .NET 8.0
+- .NET 7.0
+- .NET 6.0
+- .NET 5.0
+- .NET Core 3.1
+
 ## Simple Example
 
 ```csharp
@@ -119,8 +129,8 @@ This approach resolves the DbContext from the service provider on each database 
 ## Multi-Context Support
 
 The adapter supports storing different policy types in separate database contexts, allowing you to:
-- Store policies (p, p2, etc.) and groupings (g, g2, etc.) in different schemas
-- Use different tables for different policy types
+- Store policies (p, p2, etc.) and groupings (g, g2, etc.) in different schemas and/or tables
+- Each Context can control both schema AND table independently
 - Separate data for multi-tenant or compliance scenarios
 
 ### Quick Example
