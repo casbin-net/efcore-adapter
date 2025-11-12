@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
+#nullable enable
+
 namespace Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures
 {
     /// <summary>

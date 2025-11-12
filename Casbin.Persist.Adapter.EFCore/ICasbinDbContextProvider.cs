@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 
+#nullable enable
+
 namespace Casbin.Persist.Adapter.EFCore
 {
     /// <summary>

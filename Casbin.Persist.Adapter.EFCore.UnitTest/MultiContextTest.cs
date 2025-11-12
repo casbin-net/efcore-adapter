@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Casbin.Model;
 using Casbin.Persist.Adapter.EFCore.Entities;
 using Casbin.Persist.Adapter.EFCore.UnitTest.Extensions;
 using Casbin.Persist.Adapter.EFCore.UnitTest.Fixtures;
@@ -329,10 +330,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
             var enforcer = new Enforcer(_modelProvideFixture.GetNewRbacModel(), adapter);
 
             // Act - Load only alice's policies
-            enforcer.LoadFilteredPolicy(new Filter
-            {
-                P = AsList("alice", "", "")
-            });
+            enforcer.LoadFilteredPolicy(new SimpleFieldFilter("p", 0, Policy.ValuesFrom(AsList("alice", "", ""))));
 
             // Assert
             TestGetPolicy(enforcer, AsList(

@@ -217,14 +217,54 @@ await enforcer.LoadPolicyAsync();
 
 ### Filtered Loading
 
-Load subsets of policies across all contexts:
+Load subsets of policies across all contexts by implementing `IPolicyFilter`:
 
 ```csharp
-enforcer.LoadFilteredPolicy(new Filter
+using Casbin.Model;
+using Casbin.Persist;
+
+// Create a custom filter for specific field values
+public class SimpleFieldFilter : IPolicyFilter
 {
-    P = new[] { "alice", "", "" },  // Only Alice's policies
-    G = new[] { "alice", "" }        // Only Alice's groupings
-});
+    private readonly PolicyFilter _policyFilter;
+
+    public SimpleFieldFilter(string policyType, int fieldIndex, IPolicyValues values)
+    {
+        _policyFilter = new PolicyFilter(policyType, fieldIndex, values);
+    }
+
+    public IQueryable<T> Apply<T>(IQueryable<T> policies) where T : IPersistPolicy
+    {
+        return _policyFilter.Apply(policies);
+    }
+}
+
+// Use the filter to load only Alice's p policies
+enforcer.LoadFilteredPolicy(
+    new SimpleFieldFilter("p", 0, Policy.ValuesFrom(new[] { "alice", "", "" }))
+);
+```
+
+For more complex filtering scenarios (e.g., domain-based filtering), implement `IPolicyFilter` directly:
+
+```csharp
+public class DomainFilter : IPolicyFilter
+{
+    private readonly string _domain;
+
+    public DomainFilter(string domain) => _domain = domain;
+
+    public IQueryable<T> Apply<T>(IQueryable<T> policies) where T : IPersistPolicy
+    {
+        return policies.Where(p =>
+            (p.Type == "p" && p.Value2 == _domain) ||  // Filter p policies by domain
+            (p.Type == "g" && p.Value3 == _domain)      // Filter g policies by domain
+        );
+    }
+}
+
+// Load policies for a specific domain
+enforcer.LoadFilteredPolicy(new DomainFilter("tenant-123"));
 ```
 
 ### Dependency Injection
