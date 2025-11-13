@@ -577,7 +577,6 @@ Transaction integrity guarantees are verified by comprehensive integration tests
 |------|---------|----------------|
 | `SavePolicy_WithSharedConnection_ShouldWriteToAllContextsAtomically` | Happy path atomic write | Policies written to 3 schemas in single transaction |
 | `MultiContextSetup_WithSharedConnection_ShouldShareSamePhysicalConnection` | Connection sharing | Reference equality check confirms shared DbConnection object |
-| `SavePolicy_WhenDuplicateKeyViolationInOneContext_ShouldRollbackAllContexts` | **CRITICAL** Rollback on constraint violation | Failure in one context rolls back all contexts atomically |
 | `SavePolicy_WhenTableMissingInOneContext_ShouldRollbackAllContexts` | Rollback on severe failure | Missing table in one context rolls back all contexts |
 | `MultipleSaveOperations_WithSharedConnection_ShouldMaintainDataConsistency` | Consistency over time | Multiple incremental saves maintain integrity |
 | `SavePolicy_WithSeparateConnections_ShouldNotBeAtomic` | **Negative test** | Proves separate connections do NOT provide atomicity |
@@ -590,7 +589,7 @@ Transaction integrity guarantees are verified by comprehensive integration tests
 dotnet test --filter "Category=Integration"
 
 # Run specific test
-dotnet test --filter "FullyQualifiedName~SavePolicy_WhenDuplicateKeyViolationInOneContext_ShouldRollbackAllContexts"
+dotnet test --filter "FullyQualifiedName~SavePolicy_WithSharedConnection_ShouldWriteToAllContextsAtomically"
 ```
 
 **Note:** Integration tests are excluded from CI/CD (marked with `[Trait("Category", "Integration")]`) as they:
