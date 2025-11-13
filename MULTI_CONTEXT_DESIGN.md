@@ -609,7 +609,7 @@ dotnet test --filter "FullyQualifiedName~SavePolicy_WhenDuplicateKeyViolationInO
 **Prerequisites to run integration tests:**
 - PostgreSQL running on localhost:5432
 - Database `casbin_integration_test` must exist (schemas created automatically)
-- Connection credentials: postgres/postgres (or update ConnectionString in fixture)
+- Connection credentials: postgres/postgres4all! (or update ConnectionString in fixture)
 
 **Failure Simulation:**
 - Duplicate key violations (via direct SQL INSERT)

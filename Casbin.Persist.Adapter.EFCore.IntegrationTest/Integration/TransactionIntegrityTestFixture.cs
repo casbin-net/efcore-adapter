@@ -12,7 +12,7 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
     /// Prerequisites:
     /// - PostgreSQL running on localhost:5432
     /// - Database "casbin_integration_test" must exist
-    /// - Default credentials: postgres/postgres (or update ConnectionString)
+    /// - Default credentials: postgres/postgres4all! (or update ConnectionString)
     /// </summary>
     public class TransactionIntegrityTestFixture : IAsyncLifetime
     {
@@ -28,30 +28,21 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         {
             // Use local PostgreSQL for integration tests
             // Database must exist before running tests
-            ConnectionString = "Host=localhost;Database=casbin_integration_test;Username=synapse;Password=synapsepwd";
-            Console.WriteLine("[FIXTURE] Constructor called");
+            ConnectionString = "Host=localhost;Database=casbin_integration_test;Username=postgres;Password=postgres4all!";
         }
 
         public async Task InitializeAsync()
         {
-            Console.WriteLine("[FIXTURE] InitializeAsync START");
             try
             {
                 // Create schemas
-                Console.WriteLine("[FIXTURE] Creating schemas...");
                 await CreateSchemasAsync();
-                Console.WriteLine("[FIXTURE] Schemas created");
 
                 // Run migrations for all three schemas
-                Console.WriteLine("[FIXTURE] Running migrations...");
                 await RunMigrationsAsync();
-                Console.WriteLine("[FIXTURE] Migrations complete - tables should now exist with v0-v13");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[FIXTURE INITIALIZATION FAILED]");
-                Console.WriteLine($"Error: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 throw new InvalidOperationException(
                     $"Failed to initialize TransactionIntegrityTestFixture. " +
                     $"Ensure PostgreSQL is running and database 'casbin_integration_test' exists. " +

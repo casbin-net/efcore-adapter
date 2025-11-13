@@ -16,41 +16,6 @@ These integration tests are in a **separate test project** (`Casbin.Persist.Adap
 - Shares single PostgreSQL database: `casbin_integration_test`
 - Uses `DisableParallelization = true` on test collection for within-framework sequencing
 
-## ✅ Casbin.NET AutoSave Bug - FIXED in v2.19.1
-
-### Test Status Summary
-
-| Test | Status | Description |
-|------|--------|-------------|
-| **AutoSaveTests.TestAutoSaveOn_MultiContext_IndividualCommits** | ✅ PASSING | Documents non-atomic behavior with AutoSave ON (expected) |
-| **AutoSaveTests.TestAutoSaveOff_MultiContext_RollbackOnFailure** | ✅ PASSING | Verifies atomic rollback with AutoSave OFF |
-| **AutoSaveTests.TestAutoSaveOff_MultiContext_BatchedCommit** | ✅ PASSING | Verifies batched commit with AutoSave OFF |
-| **AutoSaveTests.TestGroupingPolicyAutoSaveOff** | ✅ PASSING | Single-context sync version |
-| **AutoSaveTests.TestGroupingPolicyAutoSaveOffAsync** | ✅ PASSING | Single-context async version |
-
-### Bug History (RESOLVED)
-
-Casbin.NET had a bug where `AddGroupingPolicy()` and `AddNamedGroupingPolicy()` ignored the `EnableAutoSave(false)` setting. This was fixed in **Casbin.NET v2.19.1**.
-
-**Previous behavior (bug):**
-- ✅ `AddPolicy()` respected AutoSave OFF (didn't call adapter)
-- ❌ `AddGroupingPolicy()` ignored AutoSave OFF (called adapter immediately)
-- ❌ `AddNamedGroupingPolicy()` ignored AutoSave OFF (called adapter immediately)
-
-**Current behavior (fixed in v2.19.1):**
-- ✅ All policy methods now respect the `EnableAutoSave(false)` setting
-- ✅ Policies stay in memory until `SavePolicy()` is called
-- ✅ Atomic transactions work correctly with AutoSave OFF
-
-### Diagnostic Logging (Can Be Removed)
-
-The adapter code may still include diagnostic Console.WriteLine statements that were used to debug the bug. These can now be removed as the issue is resolved:
-- Shows when adapter methods are called
-- Shows call stacks proving Casbin.NET is calling the adapter
-- Shows SaveChanges() being invoked despite AutoSave OFF
-
----
-
 ## Purpose
 
 These tests prove that when multiple `DbContext` instances share the same `DbConnection` object, operations across contexts are **atomic** - they either all succeed or all fail together.
@@ -93,7 +58,7 @@ The tests use these default credentials:
 - **Host**: `localhost:5432`
 - **Database**: `casbin_integration_test`
 - **Username**: `postgres`
-- **Password**: `postgres`
+- **Password**: `postgres4all!`
 
 **If your PostgreSQL uses different credentials**, update the connection string in [TransactionIntegrityTestFixture.cs](TransactionIntegrityTestFixture.cs):
 
@@ -138,10 +103,10 @@ The integration tests are organized into 3 test classes:
 | Test Class | Tests | Purpose |
 |------------|-------|---------|
 | `TransactionIntegrityTests` | 7 | Multi-context transaction atomicity and rollback |
-| `AutoSaveTests` | 11 | Casbin.NET AutoSave behavior verification |
+| `AutoSaveTests` | 10 | Casbin.NET AutoSave behavior verification |
 | `SchemaDistributionTests` | 2 | Schema routing with shared connections |
 
-**Total:** 20 integration tests
+**Total:** 19 integration tests
 
 The tests use a three-way context provider that routes:
 - **p policies** → `casbin_policies` schema
@@ -156,7 +121,6 @@ This simulates real-world multi-context scenarios where different policy types a
 |------|----------------|
 | `SavePolicy_WithSharedConnection_ShouldWriteToAllContextsAtomically` | Policies written to 3 schemas in a single atomic transaction |
 | `MultiContextSetup_WithSharedConnection_ShouldShareSamePhysicalConnection` | Reference equality confirms DbConnection object sharing |
-| `SavePolicy_WhenDuplicateKeyViolationInOneContext_ShouldRollbackAllContexts` | **CRITICAL**: Failure in one context rolls back ALL contexts |
 | `SavePolicy_WhenTableMissingInOneContext_ShouldRollbackAllContexts` | Severe failures cause complete rollback |
 | `MultipleSaveOperations_WithSharedConnection_ShouldMaintainDataConsistency` | Multiple operations maintain consistency over time |
 | `SavePolicy_WithSeparateConnections_ShouldNotBeAtomic` | **Negative test**: Proves separate connections are NOT atomic |
@@ -176,8 +140,8 @@ These tests verify that `CasbinDbContext.HasDefaultSchema()` correctly routes po
 
 | Test | Purpose | Status |
 |------|---------|--------|
-| `BaselineSchemaDistributionTest` | Baseline behavior with separate connections | ✅ Passing |
-| `SchemaDistributionTest_WithSharedConnection` | Schema routing with shared connection | ✅ Passing |
+| `SavePolicy_SeparateConnections_ShouldDistributeAcrossSchemas` | Baseline behavior with separate connections | ✅ Passing |
+| `SavePolicy_SharedConnection_ShouldDistributeAcrossSchemas` | Schema routing with shared connection | ✅ Passing |
 
 **What They Test:**
 
@@ -207,13 +171,13 @@ When using a shared connection for atomic transactions, each context must still 
 dotnet test -f net6.0 --filter "FullyQualifiedName~SchemaDistributionTests" --verbosity normal
 
 # Run specific test
-dotnet test -f net6.0 --filter "FullyQualifiedName~SchemaDistributionTest_WithSharedConnection" --verbosity normal
+dotnet test -f net6.0 --filter "FullyQualifiedName~SavePolicy_SharedConnection_ShouldDistributeAcrossSchemas" --verbosity normal
 ```
 
 ### AutoSaveTests
 
 **File:** [AutoSaveTests.cs](AutoSaveTests.cs)
-**Test Count:** 11
+**Test Count:** 10
 **Status:** ✅ All Passing
 
 **Purpose:**
@@ -230,8 +194,6 @@ These tests verify the Casbin Enforcer's `EnableAutoSave` behavior in multi-cont
 | `TestGroupingPolicyAutoSaveOff` | Grouping policies defer with AutoSave OFF | ✅ Passing |
 | `TestAutoSaveOn_MultiContext_IndividualCommits` | Multi-context: operations commit independently | ✅ Passing |
 | `TestAutoSaveOff_MultiContext_RollbackOnFailure` | Multi-context: atomic rollback with AutoSave OFF | ✅ Passing |
-| `TestRemovePolicyAutoSaveOn` / `Off` | Remove operations respect AutoSave | ✅ Passing |
-| `TestUpdatePolicyAutoSaveOn` | Update operations respect AutoSave | ✅ Passing |
 
 **Why AutoSave Testing Matters:**
 
@@ -295,24 +257,7 @@ These tests call `enforcer.EnableAutoSave(false)` immediately after creating the
 
 - **With AutoSave OFF:** Policies stay in-memory until `SavePolicyAsync()` is called. When the transaction fails, ALL operations (INSERT and DELETE) roll back atomically.
 
-**Test Evolution:**
-
-These tests originally failed with "Expected: 0, Actual: 1-2" because they used AutoSave ON. Adding `EnableAutoSave(false)` fixed them by ensuring proper rollback verification.
-
 **Code Reference:** See lines 302, 370 in [TransactionIntegrityTests.cs](TransactionIntegrityTests.cs)
-
-### Duplicate Key Violation Test
-
-The test `SavePolicy_WhenDuplicateKeyViolationInOneContext_ShouldRollbackAllContexts` verifies rollback on constraint violations.
-
-This test:
-1. Inserts a policy directly into the `casbin_roles` schema
-2. Adds NEW policies to `casbin_policies` and `casbin_groupings` schemas
-3. Manipulates Casbin's in-memory model to create a duplicate in the `casbin_roles` schema
-4. Calls `SavePolicyAsync()` which should fail due to the duplicate
-5. **Verifies that NO policies were written** to ANY schema (complete rollback)
-
-This proves that the shared transaction mechanism works correctly - when one context fails, all contexts roll back atomically.
 
 ## See Also
 
