@@ -367,9 +367,6 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest
             enforcer.AddPolicy("alice", "data1", "read");
             enforcer.AddGroupingPolicy("alice", "admin");
 
-            var initialPolicyCount = policyContext.Policies.Count();
-            var initialGroupingCount = groupingContext.Policies.Count();
-
             // Act & Assert - UpdatePolicy should complete without throwing exceptions
             enforcer.UpdatePolicy(
                 AsList("alice", "data1", "read"),
