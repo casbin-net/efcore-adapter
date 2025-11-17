@@ -87,7 +87,7 @@ namespace Casbin.Persist.Adapter.EFCore
         private readonly Dictionary<(DbContext context, string policyType), DbSet<TPersistPolicy>> _persistPoliciesByContext;
 
         protected TDbContext DbContext { get; }
-        protected DbSet<TPersistPolicy> PersistPolicies => _persistPolicies ??= GetCasbinRuleDbSet(DbContext);
+        protected DbSet<TPersistPolicy> PersistPolicies => _persistPolicies ??= GetCasbinRuleDbSet(DbContext, null);
 
         /// <summary>
         /// Creates adapter with single context (backward compatible)
