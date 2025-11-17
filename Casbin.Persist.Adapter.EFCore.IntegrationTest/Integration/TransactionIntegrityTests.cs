@@ -168,7 +168,13 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         /// Creates an enforcer with three contexts using SEPARATE DbConnections (same connection string)
         /// This is used to demonstrate non-atomic behavior when connections are not shared.
         /// </summary>
-        private async Task<Enforcer> CreateEnforcerWithSeparateConnectionsAsync()
+        private async Task<(Enforcer enforcer,
+                             NpgsqlConnection policyConnection,
+                             NpgsqlConnection groupingConnection,
+                             NpgsqlConnection roleConnection,
+                             CasbinDbContext<int> policyContext,
+                             CasbinDbContext<int> groupingContext,
+                             CasbinDbContext<int> roleContext)> CreateEnforcerWithSeparateConnectionsAsync()
         {
             // Create THREE separate connections with same connection string
             var policyConnection = new NpgsqlConnection(_fixture.ConnectionString);
@@ -194,7 +200,8 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
 
             await enforcer.LoadPolicyAsync();
 
-            return enforcer;
+            return (enforcer, policyConnection, groupingConnection, roleConnection,
+                    policyContext, groupingContext, roleContext);
         }
 
         private CasbinDbContext<int> CreateContext(NpgsqlConnection connection, string schemaName)
@@ -476,50 +483,63 @@ namespace Casbin.Persist.Adapter.EFCore.UnitTest.Integration
         public async Task SavePolicy_WithSeparateConnections_ShouldNotBeAtomic()
         {
             // Arrange - Create enforcer with SEPARATE connection objects
-            var enforcer = await CreateEnforcerWithSeparateConnectionsAsync();
+            var (enforcer, policyConnection, groupingConnection, roleConnection,
+                 policyContext, groupingContext, roleContext) = await CreateEnforcerWithSeparateConnectionsAsync();
 
-            // Add policies to all contexts
-            await enforcer.AddPolicyAsync("alice", "data1", "read");
-            await enforcer.AddGroupingPolicyAsync("alice", "admin");
-            await enforcer.AddNamedGroupingPolicyAsync("g2", "admin", "superuser");
-
-            // Drop table in roles schema to force failure
-            await _fixture.DropTableAsync(TransactionIntegrityTestFixture.RolesSchema);
-
-            Exception? caughtException = null;
-
-            // Act - Try to save, should throw due to missing table in roles schema
             try
             {
-                await enforcer.SavePolicyAsync();
+                // Add policies to all contexts
+                await enforcer.AddPolicyAsync("alice", "data1", "read");
+                await enforcer.AddGroupingPolicyAsync("alice", "admin");
+                await enforcer.AddNamedGroupingPolicyAsync("g2", "admin", "superuser");
+
+                // Drop table in roles schema to force failure
+                await _fixture.DropTableAsync(TransactionIntegrityTestFixture.RolesSchema);
+
+                Exception? caughtException = null;
+
+                // Act - Try to save, should throw due to missing table in roles schema
+                try
+                {
+                    await enforcer.SavePolicyAsync();
+                }
+                catch (Exception ex)
+                {
+                    caughtException = ex;
+                }
+
+                // Assert - Verify exception was thrown
+                Assert.NotNull(caughtException);
+
+                // Recreate table for verification queries
+                await _fixture.RunMigrationsAsync();
+
+                // CRITICAL ASSERTION - Verify policies WERE written to functioning contexts (NOT atomic!)
+                var policiesCount = await _fixture.CountPoliciesInSchemaAsync(
+                    TransactionIntegrityTestFixture.PoliciesSchema, "p");
+                var groupingsCount = await _fixture.CountPoliciesInSchemaAsync(
+                    TransactionIntegrityTestFixture.GroupingsSchema, "g");
+                var rolesCount = await _fixture.CountPoliciesInSchemaAsync(
+                    TransactionIntegrityTestFixture.RolesSchema, "g2");
+
+                // This test DOCUMENTS the non-atomic behavior without shared connections
+                // Policies and groupings were committed despite roles context failure
+                Assert.Equal(1, policiesCount);   // Written (NOT rolled back)
+                Assert.Equal(1, groupingsCount);  // Written (NOT rolled back)
+                Assert.Equal(0, rolesCount);      // Failed to write (table dropped)
+
+                // This proves that connection string matching alone is INSUFFICIENT for atomicity
+                // Must use shared DbConnection OBJECT for atomic transactions
             }
-            catch (Exception ex)
+            finally
             {
-                caughtException = ex;
+                await policyContext.DisposeAsync();
+                await groupingContext.DisposeAsync();
+                await roleContext.DisposeAsync();
+                await policyConnection.DisposeAsync();
+                await groupingConnection.DisposeAsync();
+                await roleConnection.DisposeAsync();
             }
-
-            // Assert - Verify exception was thrown
-            Assert.NotNull(caughtException);
-
-            // Recreate table for verification queries
-            await _fixture.RunMigrationsAsync();
-
-            // CRITICAL ASSERTION - Verify policies WERE written to functioning contexts (NOT atomic!)
-            var policiesCount = await _fixture.CountPoliciesInSchemaAsync(
-                TransactionIntegrityTestFixture.PoliciesSchema, "p");
-            var groupingsCount = await _fixture.CountPoliciesInSchemaAsync(
-                TransactionIntegrityTestFixture.GroupingsSchema, "g");
-            var rolesCount = await _fixture.CountPoliciesInSchemaAsync(
-                TransactionIntegrityTestFixture.RolesSchema, "g2");
-
-            // This test DOCUMENTS the non-atomic behavior without shared connections
-            // Policies and groupings were committed despite roles context failure
-            Assert.Equal(1, policiesCount);   // Written (NOT rolled back)
-            Assert.Equal(1, groupingsCount);  // Written (NOT rolled back)
-            Assert.Equal(0, rolesCount);      // Failed to write (table dropped)
-
-            // This proves that connection string matching alone is INSUFFICIENT for atomicity
-            // Must use shared DbConnection OBJECT for atomic transactions
         }
 
         #endregion
